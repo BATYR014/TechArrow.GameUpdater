@@ -29,3 +29,11 @@ operation reports why it cannot proceed. Original manifests are backed up under
 Prepared titles retain immediate-update priority. Steam still controls network,
 login and download restrictions. Actual download triggering was verified on PEAK;
 Steamworks preparation is covered by tests but has not yet been verified live.
+
+Version 0.2.2 enables **Обновить всё**: Steam maintenance and launch requests
+for configured Epic Games, Lesta, Battle.net, EA, Riot, VK Play and Wargaming
+clients. Each client reports missing paths, launch errors or the launch request
+independently. Their own automatic game updates must be enabled and the user
+must be signed in. This version does not force their queues, verify their game
+download completion or close them. The same client startup runs on schedule;
+missing Steam no longer prevents other selected clients from starting.

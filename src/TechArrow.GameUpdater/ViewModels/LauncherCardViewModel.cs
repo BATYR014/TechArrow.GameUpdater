@@ -3,7 +3,7 @@ using TechArrow.GameUpdater.Core.Models;
 namespace TechArrow.GameUpdater.ViewModels;
 public sealed class LauncherCardViewModel(string name, string plannedStage) : ObservableObject
 {
-    private string _status = "Не подключён", _detail = "Игры и активность появятся после подключения модуля.";
+    private string _status = "Путь ещё не проверен", _detail = "Выберите .exe клиента в настройках. Общая кнопка запускает клиент для его автообновлений; состояние загрузок пока не отслеживается.";
     private IReadOnlyList<GameInfo> _games = [];
     public string Name { get; } = name;
     public string PlannedStage { get; } = plannedStage;

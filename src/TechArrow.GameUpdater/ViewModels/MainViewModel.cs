@@ -15,6 +15,56 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string ScheduleStatus { get => _scheduleStatus; private set => Set(ref _scheduleStatus, value); }
     private readonly string _steamBackups;
     public AsyncCommand UpdateSteamCommand { get; }
+    public AsyncCommand UpdateAllCommand { get; }
+    private string _allUpdateStatus = "Выберите .exe клиентов в настройках. Для остальных лаунчеров включите автообновления игр в самом клиенте.";
+    public string AllUpdateStatus { get => _allUpdateStatus; private set => Set(ref _allUpdateStatus, value); }
+    private async Task StartOtherLaunchersAsync(AppSettings configuration, CancellationToken token)
+    {
+        int requested = 0, missing = 0, failed = 0;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var request in LauncherStartupService.Requests(configuration))
+        {
+            token.ThrowIfCancellationRequested();
+            var card = Launchers[request.CardIndex];
+            try
+            {
+                var executable = LauncherStartupService.ResolveExecutable(request);
+                if (executable is not null && !seen.Add(executable))
+                { card.Status = "Общий файл клиента"; card.Detail = "Этот .exe уже обработан для другого лаунчера. Проверьте выбранные пути."; continue; }
+                var result = await Task.Run(() => LauncherStartupService.Start(request, token), token);
+                card.Status = result.Status; card.Detail = result.Detail;
+                if (executable is null) missing++; else requested++;
+                _logs.CreateLogger("Launchers").LogInformation("{Launcher}: {Status}", request.Name, result.Status);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                failed++; card.Status = "Ошибка запуска"; card.Detail = ex.Message;
+                _logs.CreateLogger("Launchers").LogError(ex, "Ошибка запуска {Launcher}", request.Name);
+            }
+        }
+        AllUpdateStatus = $"Клиентов обработано: {requested}. Без пути: {missing}. Ошибок: {failed}. Загрузки остальных лаунчеров управляются их настройками автообновления.";
+    }
+    private async Task UpdateAllAsync()
+    {
+        _scheduleBusy = true;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _scheduledCancellation = cancellation;
+        RefreshSteamCommands();
+        try
+        {
+            AllUpdateStatus = "Запуск выбранных клиентов…";
+            await StartOtherLaunchersAsync(Settings.SavedSettings, cancellation.Token);
+            var steam = await _steam.ScanAsync(Settings.SavedSettings.SteamPath);
+            if (steam.ExecutablePath is null)
+            { SteamWarnings = "Steam не найден. Остальные выбранные клиенты обработаны."; return; }
+            await PrepareAndStartSteamAsync(Settings.SavedSettings, cancellation.Token);
+            await MonitorSteamAsync(Settings.SavedSettings, cancellation.Token);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        { AllUpdateStatus = "Обслуживание остановлено. Уже открытые клиенты продолжают работать."; }
+        finally { _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
+    }
     private async Task PrepareAndStartSteamAsync(AppSettings configuration, CancellationToken token)
     {
         var inventory = await _steam.ScanAsync(configuration.SteamPath);
@@ -97,9 +147,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 logger.LogInformation("{Status}", ScheduleStatus); return;
             }
             ScheduleStatus = "Запуск Steam по расписанию…";
+            await StartOtherLaunchersAsync(configuration, scheduleToken);
             await ScanSteamPathAsync(configuration.SteamPath);
             scheduleToken.ThrowIfCancellationRequested();
-            if (_steamExecutable is null) throw new InvalidOperationException("Steam не найден. Выберите файл клиента в настройках.");
+            if (_steamExecutable is null)
+            { ScheduleStatus = "Остальные выбранные клиенты обработаны. Steam не найден; выберите steam.exe в настройках."; return; }
             await PrepareAndStartSteamAsync(configuration, scheduleToken);
             var startup = System.Diagnostics.Stopwatch.StartNew();
             bool clientStarted = false;
@@ -139,7 +191,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void RefreshSteamCommands()
     {
         Raise(nameof(CanChangeLauncherPaths));
-        ScanSteamCommand.Refresh(); StartSteamCommand.Refresh(); MonitorSteamCommand.Refresh(); StopMonitorCommand.Refresh(); UpdateSteamCommand.Refresh();
+        ScanSteamCommand.Refresh(); StartSteamCommand.Refresh(); MonitorSteamCommand.Refresh(); StopMonitorCommand.Refresh(); UpdateSteamCommand.Refresh(); UpdateAllCommand.Refresh();
     }
     private async Task MonitorSteamAsync(AppSettings? scheduledSettings = null, CancellationToken scheduleToken = default)
     {
@@ -250,6 +302,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Settings = settings; _logs = logs; _scheduleStore = new(paths);
         _steamBackups = System.IO.Path.Combine(paths.Root, "SteamManifestBackups");
         UpdateSteamCommand = new(UpdateSteamAsync, SteamError, () => Settings.CanSelectFiles && !_monitoring && !_scheduleBusy);
+        UpdateAllCommand = new(UpdateAllAsync, SteamError, () => Settings.CanSelectFiles && !_monitoring && !_scheduleBusy);
         ScanSteamCommand = new(ScanSteamAsync, SteamError, () => !_monitoring && !_scheduleBusy);
         StartSteamCommand = new(StartSteamAsync, SteamError, () => _steamExecutable is not null && !_monitoring && !_scheduleBusy);
         MonitorSteamCommand = new(() => MonitorSteamAsync(), SteamError, () => _steamExecutable is not null && !_monitoring && !_scheduleBusy);
@@ -259,7 +312,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
     public SettingsViewModel Settings { get; }
     public AppUpdatesViewModel? Updates { get; set; }
-    public IReadOnlyList<LauncherCardViewModel> Launchers { get; } = [new("Steam", "Этапы 2–3"), new("Epic Games", "Этап 5"), new("Lesta Game Center", "Этап 6"), new("Battle.net", "Модуль запланирован"), new("EA app", "Модуль запланирован"), new("Riot Client", "Модуль запланирован"), new("VK Play", "Модуль запланирован"), new("Wargaming Game Center", "Модуль запланирован")];
+    public IReadOnlyList<LauncherCardViewModel> Launchers { get; } = [new("Steam", "Подготовка очереди и мониторинг"), new("Epic Games", "Автообновления клиента"), new("Lesta Game Center", "Автообновления клиента"), new("Battle.net", "Автообновления клиента"), new("EA app", "Автообновления клиента"), new("Riot Client", "Автообновления клиента"), new("VK Play", "Автообновления клиента"), new("Wargaming Game Center", "Автообновления клиента")];
     public string LogText { get => _logText; private set => Set(ref _logText, value); }
     public string LogError { get => _logError; private set => Set(ref _logError, value); }
     private async void OnTick(object? sender, EventArgs e)
