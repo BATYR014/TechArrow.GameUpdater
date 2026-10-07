@@ -1,0 +1,219 @@
+using System.Windows.Threading;
+using TechArrow.GameUpdater.Core.Models;
+using Microsoft.Extensions.Logging;
+using TechArrow.GameUpdater.Infrastructure.Services;
+namespace TechArrow.GameUpdater.ViewModels;
+public sealed class MainViewModel : ObservableObject, IDisposable
+{
+    private readonly ScheduleStateStore _scheduleStore;
+    private readonly CancellationTokenSource _lifetime = new();
+    private bool _scheduleBusy;
+    private CancellationTokenSource? _scheduledCancellation;
+    private DateTimeOffset? _handledOccurrence;
+    private string _nextMaintenance = "Расписание выключено", _scheduleStatus = "";
+    public string NextMaintenance { get => _nextMaintenance; private set => Set(ref _nextMaintenance, value); }
+    public string ScheduleStatus { get => _scheduleStatus; private set => Set(ref _scheduleStatus, value); }
+    private async Task CheckScheduleAsync()
+    {
+        if (!Settings.CanSelectFiles || _disposed) return;
+        var configuration = Settings.SavedSettings;
+        var now = DateTimeOffset.UtcNow;
+        var next = WeeklySchedule.Next(configuration, now);
+        NextMaintenance = next is null ? "Расписание выключено" : $"{next:dd.MM.yyyy HH:mm} · Кызылорда (UTC+5)";
+        var due = WeeklySchedule.Due(configuration, now);
+        if (due is null || _handledOccurrence == due || _scheduleBusy) return;
+        var occupied = _monitoring || !ScanSteamCommand.CanExecute(null) || (!StartSteamCommand.CanExecute(null) && _steamExecutable is not null);
+        _scheduleBusy = true;
+        using var scheduledCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _scheduledCancellation = scheduledCancellation;
+        var scheduleToken = scheduledCancellation.Token;
+        RefreshSteamCommands();
+        _handledOccurrence = due;
+        var logger = _logs.CreateLogger("Schedule");
+        try
+        {
+            if (!await Task.Run(() => _scheduleStore.TryClaim(due.Value), scheduleToken)) return;
+            scheduleToken.ThrowIfCancellationRequested();
+            if (occupied)
+            {
+                ScheduleStatus = "Запуск пропущен: Steam уже обслуживается.";
+                logger.LogInformation("{Status}", ScheduleStatus); return;
+            }
+            ScheduleStatus = "Запуск Steam по расписанию…";
+            await ScanSteamPathAsync(configuration.SteamPath);
+            scheduleToken.ThrowIfCancellationRequested();
+            if (_steamExecutable is null) throw new InvalidOperationException("Steam не найден. Выберите файл клиента в настройках.");
+            if (!Launchers[0].Status.Equals("Запущен")) _steam.Start(_steamExecutable);
+            var startup = System.Diagnostics.Stopwatch.StartNew();
+            bool clientStarted = false;
+            while (startup.Elapsed < TimeSpan.FromSeconds(60))
+            {
+                scheduleToken.ThrowIfCancellationRequested();
+                var check = await _steam.ScanAsync(_steamExecutable);
+                if (check.IsRunning) { clientStarted = true; break; }
+                await Task.Delay(1000, scheduleToken);
+            }
+            scheduleToken.ThrowIfCancellationRequested();
+            if (!clientStarted) throw new TimeoutException("Steam не запустился за 60 секунд.");
+            if (_monitoring) { ScheduleStatus = "Мониторинг уже запущен."; return; }
+            AutoCloseSteam = configuration.ScheduleAutoCloseSteam;
+            ScheduleStatus = "Steam открыт по расписанию. Мониторинг запущен.";
+            logger.LogInformation("{Status}", ScheduleStatus);
+            await MonitorSteamAsync(configuration, scheduleToken);
+            ScheduleStatus = "Сессия по расписанию завершена: " + MonitorStatus;
+        }
+        catch (OperationCanceledException) when (scheduleToken.IsCancellationRequested) { if (!_disposed) ScheduleStatus = "Запуск по расписанию остановлен."; }
+        catch (Exception ex)
+        {
+            if (!_disposed) { ScheduleStatus = "Ошибка расписания: " + ex.Message; logger.LogError(ex, "Ошибка обслуживания по расписанию"); }
+        }
+        finally { _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
+    }
+    private CancellationTokenSource? _monitorCancellation;
+    private bool _monitoring, _disposed, _autoCloseSteam;
+    private string _monitorStatus = "Мониторинг выключен", _monitorDetail = "Откройте Steam и запустите мониторинг.", _updateText = "";
+    public bool CanChangeLauncherPaths => !_monitoring && !_scheduleBusy;
+    public bool AutoCloseSteam { get => _autoCloseSteam; set => Set(ref _autoCloseSteam, value); }
+    public string MonitorStatus { get => _monitorStatus; private set => Set(ref _monitorStatus, value); }
+    public string MonitorDetail { get => _monitorDetail; private set => Set(ref _monitorDetail, value); }
+    public string UpdateText { get => _updateText; private set => Set(ref _updateText, value); }
+    public AsyncCommand MonitorSteamCommand { get; }
+    public AsyncCommand StopMonitorCommand { get; }
+    private void RefreshSteamCommands()
+    {
+        Raise(nameof(CanChangeLauncherPaths));
+        ScanSteamCommand.Refresh(); StartSteamCommand.Refresh(); MonitorSteamCommand.Refresh(); StopMonitorCommand.Refresh();
+    }
+    private async Task MonitorSteamAsync(AppSettings? scheduledSettings = null, CancellationToken scheduleToken = default)
+    {
+        var settings = scheduledSettings ?? Settings.MonitoringSettings();
+        _monitoring = true;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, scheduleToken);
+        _monitorCancellation = cancellation;
+        RefreshSteamCommands();
+        try
+        {
+            await ScanSteamPathAsync(settings.SteamPath);
+            cancellation.Token.ThrowIfCancellationRequested();
+            if (_steamExecutable is null) throw new InvalidOperationException("Сначала укажите рабочий путь Steam.");
+            var executable = _steamExecutable;
+            using var reader = new SteamMonitorReader(executable);
+            var policy = new SteamCompletionPolicy(settings.IdleSeconds, settings.GraceSeconds, settings.StuckTimeoutMinutes);
+            var logger = _logs.CreateLogger("SteamMonitor");
+            logger.LogInformation("Мониторинг Steam запущен: простой {Idle} сек., пауза {Grace} сек.", settings.IdleSeconds, settings.GraceSeconds);
+            string lastState = "";
+            while (true)
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+                var reading = await Task.Run(reader.Read, cancellation.Token);
+                cancellation.Token.ThrowIfCancellationRequested();
+                var decision = policy.Evaluate(reading.Sample);
+                MonitorStatus = decision.State; MonitorDetail = decision.Detail;
+                UpdateText = string.Join(Environment.NewLine, reading.Sample.Updates.Select(u => u.Display));
+                SteamWarnings = string.Join(Environment.NewLine, reading.Inventory.Warnings);
+                Launchers[0].Games = reading.Inventory.Games;
+                if (lastState != decision.State)
+                { logger.LogInformation("Steam: {State}. {Detail}", decision.State, decision.Detail); lastState = decision.State; }
+                if (!reading.Sample.IsRunning) break;
+                if (decision.ReadyToClose && AutoCloseSteam)
+                {
+                    // Re-read immediately before sending the exit request. Any activity resets the countdown.
+                    var finalReading = await Task.Run(reader.Read, cancellation.Token);
+                    var finalDecision = policy.Evaluate(finalReading.Sample);
+                    cancellation.Token.ThrowIfCancellationRequested();
+                    if (!AutoCloseSteam || !finalDecision.ReadyToClose)
+                    {
+                        MonitorStatus = finalDecision.State; MonitorDetail = finalDecision.Detail;
+                        await Task.Delay(TimeSpan.FromSeconds(3), cancellation.Token);
+                        continue;
+                    }
+                    MonitorStatus = "Корректное закрытие Steam";
+                    MonitorDetail = "Отправлен запрос выхода. Ожидание завершения клиента…";
+                    logger.LogInformation("Отправка Steam штатной команды выхода.");
+                    bool exited = await SteamMonitorReader.RequestExitAsync(executable, settings.GracefulExitTimeoutSeconds, cancellation.Token);
+                    MonitorStatus = exited ? "Готово · Steam закрыт" : "Steam не завершился";
+                    MonitorDetail = exited ? "Наблюдавшиеся обновления завершены, клиент корректно закрыт." : "Время ожидания истекло. Клиент оставлен открытым; проверьте окно Steam.";
+                    logger.LogInformation("Результат выхода Steam: {Exited}", exited);
+                    break;
+                }
+                await Task.Delay(TimeSpan.FromSeconds(3), cancellation.Token);
+            }
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        { if (!_disposed) { MonitorStatus = "Мониторинг остановлен"; MonitorDetail = "Новые команды закрытия не отправляются."; } }
+        catch (Exception ex)
+        { if (!_disposed) { MonitorStatus = "Ошибка мониторинга"; MonitorDetail = ex.Message; SteamError(ex); } }
+        finally
+        {
+            _monitorCancellation = null; _monitoring = false;
+            if (!_disposed) RefreshSteamCommands();
+        }
+    }
+    private readonly LoggingService _logs;
+    private readonly SteamService _steam = new();
+    private string? _steamExecutable;
+    private string _steamSummary = "Поиск Steam…";
+    private string _steamLibraries = "", _steamWarnings = "";
+    public string SteamSummary { get => _steamSummary; private set => Set(ref _steamSummary, value); }
+    public string SteamLibraries { get => _steamLibraries; private set => Set(ref _steamLibraries, value); }
+    public string SteamWarnings { get => _steamWarnings; private set => Set(ref _steamWarnings, value); }
+    public AsyncCommand ScanSteamCommand { get; }
+    public AsyncCommand StartSteamCommand { get; }
+    private void SteamError(Exception ex)
+    {
+        SteamWarnings = "Ошибка Steam: " + ex.Message;
+        _logs.CreateLogger("Steam").LogError(ex, "Ошибка модуля Steam");
+    }
+    public Task ScanSteamAsync() => ScanSteamPathAsync(Settings.SteamPath);
+    private async Task ScanSteamPathAsync(string? path)
+    {
+        SteamSummary = "Поиск клиента и игр…";
+        var result = await _steam.ScanAsync(path);
+        _steamExecutable = result.ExecutablePath;
+        StartSteamCommand.Refresh(); MonitorSteamCommand.Refresh();
+        var card = Launchers[0];
+        card.Status = result.ExecutablePath is null ? "Не найден" : result.IsRunning ? "Запущен" : "Установлен";
+        card.Games = result.Games;
+        card.Detail = result.ExecutablePath is null ? "Укажите путь к steam.exe в настройках." : result.ExecutablePath;
+        SteamSummary = result.ExecutablePath is null ? "Steam не найден" : $"Библиотек: {result.Libraries.Count} · Установленных игр: {result.Games.Count}";
+        SteamLibraries = string.Join(Environment.NewLine, result.Libraries);
+        SteamWarnings = string.Join(Environment.NewLine, result.Warnings);
+        _logs.CreateLogger("Steam").LogInformation("Поиск Steam: {Status}, игр: {Count}", card.Status, result.Games.Count);
+    }
+    private async Task StartSteamAsync()
+    {
+        if (_steamExecutable is null) return;
+        _steam.Start(_steamExecutable);
+        await ScanSteamAsync();
+    }
+    private readonly DispatcherTimer _timer;
+    private string _logText = "", _logError = "";
+    public MainViewModel(SettingsViewModel settings, LoggingService logs, AppPaths paths)
+    {
+        Settings = settings; _logs = logs; _scheduleStore = new(paths);
+        ScanSteamCommand = new(ScanSteamAsync, SteamError, () => !_monitoring && !_scheduleBusy);
+        StartSteamCommand = new(StartSteamAsync, SteamError, () => _steamExecutable is not null && !_monitoring && !_scheduleBusy);
+        MonitorSteamCommand = new(() => MonitorSteamAsync(), SteamError, () => _steamExecutable is not null && !_monitoring && !_scheduleBusy);
+        StopMonitorCommand = new(() => { _monitorCancellation?.Cancel(); _scheduledCancellation?.Cancel(); return Task.CompletedTask; }, SteamError, () => _monitoring || _scheduleBusy);
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _timer.Tick += OnTick; _timer.Start();
+    }
+    public SettingsViewModel Settings { get; }
+    public AppUpdatesViewModel? Updates { get; set; }
+    public IReadOnlyList<LauncherCardViewModel> Launchers { get; } = [new("Steam", "Этапы 2–3"), new("Epic Games", "Этап 5"), new("Lesta Game Center", "Этап 6"), new("Battle.net", "Модуль запланирован"), new("EA app", "Модуль запланирован"), new("Riot Client", "Модуль запланирован"), new("VK Play", "Модуль запланирован"), new("Wargaming Game Center", "Модуль запланирован")];
+    public string LogText { get => _logText; private set => Set(ref _logText, value); }
+    public string LogError { get => _logError; private set => Set(ref _logError, value); }
+    private async void OnTick(object? sender, EventArgs e)
+    {
+        if (_steamExecutable is not null)
+        {
+            var processes = System.Diagnostics.Process.GetProcessesByName("steam");
+            Launchers[0].Status = processes.Length > 0 ? "Запущен" : "Установлен";
+            foreach (var process in processes) process.Dispose();
+        }
+        LogText = string.Join(Environment.NewLine, _logs.Snapshot);
+        LogError = _logs.WriteError ?? "";
+        try { await CheckScheduleAsync(); } catch (Exception ex) { if (!_disposed) ScheduleStatus = "Ошибка расписания: " + ex.Message; }
+    }
+    public void Dispose() { _disposed = true; _lifetime.Cancel(); _scheduledCancellation?.Cancel(); _monitorCancellation?.Cancel(); _timer.Stop(); _timer.Tick -= OnTick; }
+}

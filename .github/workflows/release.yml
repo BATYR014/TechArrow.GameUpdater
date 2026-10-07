@@ -1,0 +1,46 @@
+name: Publish TechArrow release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, for example 0.2.0 (increase for each update)'
+        required: true
+        type: string
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Verify settings, Steam monitoring and Windows startup
+        shell: pwsh
+        run: |
+          dotnet run --project tests/TechArrow.GameUpdater.SmokeTests/TechArrow.GameUpdater.SmokeTests.csproj
+          if ($LASTEXITCODE -ne 0) { throw 'Smoke checks failed.' }
+          dotnet run --project tests/TechArrow.GameUpdater.WindowsTests/TechArrow.GameUpdater.WindowsTests.csproj
+          if ($LASTEXITCODE -ne 0) { throw 'Windows checks failed.' }
+      - name: Build installer and update packages
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          ./scripts/Build-Release.ps1 -Version $env:RELEASE_VERSION -UpdateSource "https://github.com/$env:RELEASE_REPOSITORY"
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          $tag = "v$env:RELEASE_VERSION"
+          gh release view $tag --repo $env:RELEASE_REPOSITORY 2>$null
+          if ($LASTEXITCODE -eq 0) { throw 'That release version already exists. Increase the version.' }
+          $files = Get-ChildItem -LiteralPath ./artifacts/Releases -File | Select-Object -ExpandProperty FullName
+          gh release create $tag @files --repo $env:RELEASE_REPOSITORY --target $env:RELEASE_COMMIT --title "TechArrow $env:RELEASE_VERSION" --generate-notes
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub release publishing failed.' }

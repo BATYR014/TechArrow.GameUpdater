@@ -1,0 +1,49 @@
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using Microsoft.Win32;
+using TechArrow.GameUpdater.ViewModels;
+namespace TechArrow.GameUpdater.Views;
+public partial class MainWindow : Window
+{
+    private bool _selectingFile;
+    public bool CanRestartForUpdate => !_selectingFile;
+    public MainWindow(MainViewModel viewModel, AppUpdatesViewModel updates) { InitializeComponent(); viewModel.Updates = updates; DataContext = viewModel; Title = "TechArrow Game Updater — v" + updates.CurrentVersion; }
+    private async void ChooseExecutable_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectingFile || sender is not Button { Tag: string launcher } || DataContext is not MainViewModel viewModel ||
+            !viewModel.CanChangeLauncherPaths || !viewModel.Settings.CanSelectFiles) return;
+        _selectingFile = true;
+        try
+        {
+            var currentPath = launcher switch
+            {
+                "Steam" => viewModel.Settings.SteamPath, "Epic" => viewModel.Settings.EpicPath,
+                "Lesta" => viewModel.Settings.LestaPath, "BattleNet" => viewModel.Settings.BattleNetPath,
+                "Ea" => viewModel.Settings.EaPath, "Riot" => viewModel.Settings.RiotPath,
+                "VkPlay" => viewModel.Settings.VkPlayPath, "Wargaming" => viewModel.Settings.WargamingPath,
+                _ => ""
+            };
+            var dialog = new OpenFileDialog
+            {
+                Title = "Выберите файл клиента: " + launcher,
+                Filter = launcher == "Steam" ? "Клиент Steam (steam.exe)|steam.exe" : "Приложения (*.exe)|*.exe",
+                CheckFileExists = true, CheckPathExists = true, Multiselect = false,
+                DefaultExt = ".exe", RestoreDirectory = true
+            };
+            if (File.Exists(currentPath))
+            {
+                dialog.InitialDirectory = Path.GetDirectoryName(currentPath);
+                dialog.FileName = Path.GetFileName(currentPath);
+            }
+            if (dialog.ShowDialog(this) != true) return;
+            await viewModel.Settings.SelectExecutableAsync(launcher, dialog.FileName);
+            if (launcher == "Steam") await viewModel.ScanSteamAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Выбор лаунчера", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally { _selectingFile = false; }
+    }
+}
