@@ -307,6 +307,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         StartSteamCommand = new(StartSteamAsync, SteamError, () => _steamExecutable is not null && !_monitoring && !_scheduleBusy);
         MonitorSteamCommand = new(() => MonitorSteamAsync(), SteamError, () => _steamExecutable is not null && !_monitoring && !_scheduleBusy);
         StopMonitorCommand = new(() => { _monitorCancellation?.Cancel(); _scheduledCancellation?.Cancel(); return Task.CompletedTask; }, SteamError, () => _monitoring || _scheduleBusy);
+        Settings.PropertyChanged += OnSettingsChanged;
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _timer.Tick += OnTick; _timer.Start();
     }
@@ -315,6 +316,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public IReadOnlyList<LauncherCardViewModel> Launchers { get; } = [new("Steam", "Подготовка очереди и мониторинг"), new("Epic Games", "Автообновления клиента"), new("Lesta Game Center", "Автообновления клиента"), new("Battle.net", "Автообновления клиента"), new("EA app", "Автообновления клиента"), new("Riot Client", "Автообновления клиента"), new("VK Play", "Автообновления клиента"), new("Wargaming Game Center", "Автообновления клиента")];
     public string LogText { get => _logText; private set => Set(ref _logText, value); }
     public string LogError { get => _logError; private set => Set(ref _logError, value); }
+    private void OnSettingsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SettingsViewModel.CanSelectFiles) && !_disposed) RefreshSteamCommands();
+    }
     private async void OnTick(object? sender, EventArgs e)
     {
         if (_steamExecutable is not null)
@@ -327,5 +332,5 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         LogError = _logs.WriteError ?? "";
         try { await CheckScheduleAsync(); } catch (Exception ex) { if (!_disposed) ScheduleStatus = "Ошибка расписания: " + ex.Message; }
     }
-    public void Dispose() { _disposed = true; _lifetime.Cancel(); _scheduledCancellation?.Cancel(); _monitorCancellation?.Cancel(); _timer.Stop(); _timer.Tick -= OnTick; }
+    public void Dispose() { _disposed = true; Settings.PropertyChanged -= OnSettingsChanged; _lifetime.Cancel(); _scheduledCancellation?.Cancel(); _monitorCancellation?.Cancel(); _timer.Stop(); _timer.Tick -= OnTick; }
 }
