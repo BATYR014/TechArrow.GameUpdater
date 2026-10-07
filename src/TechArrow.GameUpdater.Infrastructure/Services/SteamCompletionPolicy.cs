@@ -3,6 +3,7 @@ namespace TechArrow.GameUpdater.Infrastructure.Services;
 public sealed record SteamUpdate(string Id, string Name, long? Flags, long? TotalBytes,
     long? DownloadedBytes, long? StageBytes, long? StagedBytes)
 {
+    public long? ScheduledAutoUpdate { get; init; }
     public bool Complete => Flags == 4 && TotalBytes is not null && DownloadedBytes is not null &&
         DownloadedBytes >= TotalBytes && (StageBytes == 0 || StageBytes is not null && StagedBytes >= StageBytes);
     public bool Pending => Flags is not null && (Flags & (2 | 256 | 512 | 1024 | 65536 | 131072 | 262144 | 524288 | 1048576 | 2097152 | 4194304 | 8388608)) != 0 ||

@@ -26,8 +26,8 @@
                         <TextBlock Text="{Binding MonitorDetail}" Style="{StaticResource Caption}" Margin="0,8,0,12" AutomationProperties.LiveSetting="Polite"/>
                         <TextBlock Text="{Binding UpdateText}" Margin="0,0,0,14"/>
                         <CheckBox Content="Закрыть Steam после завершения наблюдавшихся обновлений" IsChecked="{Binding AutoCloseSteam}" Foreground="{StaticResource TextBrush}" Margin="0,0,0,16"/>
-                        <WrapPanel><Button Content="Начать мониторинг" Command="{Binding MonitorSteamCommand}" Margin="0,0,12,8"/><Button Content="Остановить" Command="{Binding StopMonitorCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,0,8"/></WrapPanel>
-                        <TextBlock Text="Обновления запускаются в Steam. Мониторинг проверяет файлы каждые 3 секунды. Процент относится к скачиванию; установка проверяется отдельно. Простои, паузы и неизвестные данные не подтверждают завершение." Style="{StaticResource Caption}" FontSize="12"/>
+                        <WrapPanel><Button Content="Запустить обновления Steam" Command="{Binding UpdateSteamCommand}" Margin="0,0,12,8"/><Button Content="Начать мониторинг" Command="{Binding MonitorSteamCommand}" Margin="0,0,12,8"/><Button Content="Остановить" Command="{Binding StopMonitorCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,0,8"/></WrapPanel>
+                        <TextBlock Text="«Запустить обновления Steam» подготавливает отложенные обновления во всех библиотеках и включает мониторинг. Для подготовки Steam перезапускается, если нет активных игр или загрузок. Мониторинг проверяет файлы каждые 3 секунды. Процент относится к скачиванию; установка проверяется отдельно. Простои, паузы и неизвестные данные не подтверждают завершение." Style="{StaticResource Caption}" FontSize="12"/>
 
                     </StackPanel></Border>
                     <ItemsControl ItemsSource="{Binding Launchers}">
@@ -132,7 +132,7 @@
                         </WrapPanel>
                         <TextBlock Text="Время запуска · ЧЧ:ММ"/><TextBox Text="{Binding ScheduleTime, UpdateSourceTrigger=PropertyChanged}" Width="140" HorizontalAlignment="Left" MaxLength="5" AutomationProperties.Name="Время запуска расписания"/>
                         <CheckBox Content="Закрывать Steam после подтверждённого завершения обновлений" IsChecked="{Binding ScheduleAutoClose}" Foreground="{StaticResource TextBrush}" Margin="0,0,0,16"/>
-                        <TextBlock Text="Нажмите «Сохранить настройки», чтобы применить расписание. Оно открывает Steam и запускает мониторинг; очередь загрузок управляется клиентом Steam." Style="{StaticResource Caption}"/>
+                        <TextBlock Text="Нажмите «Сохранить настройки», чтобы применить расписание. Оно подготавливает отложенные обновления всех игр и пакетов Steamworks, запускает Steam и мониторинг. Режим подготовленных игр меняется на немедленное обновление; оригинальные манифесты сохраняются локально." Style="{StaticResource Caption}"/>
                     </StackPanel></Border>
                     <Border Style="{StaticResource Card}"><StackPanel>
                         <TextBlock Text="Мониторинг активности" FontSize="21" FontWeight="SemiBold"/>

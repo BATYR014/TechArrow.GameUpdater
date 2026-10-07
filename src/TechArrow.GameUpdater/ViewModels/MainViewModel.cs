@@ -13,6 +13,63 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _nextMaintenance = "Расписание выключено", _scheduleStatus = "";
     public string NextMaintenance { get => _nextMaintenance; private set => Set(ref _nextMaintenance, value); }
     public string ScheduleStatus { get => _scheduleStatus; private set => Set(ref _scheduleStatus, value); }
+    private readonly string _steamBackups;
+    public AsyncCommand UpdateSteamCommand { get; }
+    private async Task PrepareAndStartSteamAsync(AppSettings configuration, CancellationToken token)
+    {
+        var inventory = await _steam.ScanAsync(configuration.SteamPath);
+        token.ThrowIfCancellationRequested();
+        var executable = inventory.ExecutablePath ?? throw new InvalidOperationException("Steam не найден. Выберите steam.exe в настройках.");
+        _steamExecutable = executable;
+        var scheduled = inventory.Updates.Any(update => update.Flags == 6 && update.ScheduledAutoUpdate > 0);
+        if (scheduled)
+        {
+            if (inventory.IsRunning)
+            {
+                if (inventory.Warnings.Count != 0)
+                    throw new InvalidOperationException("Не удалось полностью проверить библиотеки Steam. Закройте Steam вручную и повторите обслуживание.");
+                if (SteamMonitorReader.ReadRunningGames() != false)
+                    throw new InvalidOperationException("Закройте запущенные игры. Не удалось безопасно перезапустить Steam для подготовки очереди.");
+                if (inventory.Updates.Any(update => update.Flags is not (4 or 6)))
+                    throw new InvalidOperationException("Steam занят загрузкой, установкой или проверкой. Дождитесь завершения перед подготовкой очереди.");
+                ScheduleStatus = "Закрытие Steam для подготовки отложенных обновлений…";
+                if (!await SteamMonitorReader.RequestExitAsync(executable, configuration.GracefulExitTimeoutSeconds, token))
+                    throw new InvalidOperationException("Steam не завершился. Манифесты не изменены.");
+            }
+            ScheduleStatus = "Подготовка отложенных обновлений во всех библиотеках…";
+            var result = await Task.Run(() => SteamScheduledUpdatePreparation.PrepareLibraries(inventory.Libraries, _steamBackups, token), token);
+            SteamWarnings = string.Join(Environment.NewLine, result.Warnings);
+            var logger = _logs.CreateLogger("SteamQueue");
+            logger.LogInformation("Подготовлены отложенные обновления: {Games}. Резервные копии: {Backups}", string.Join(", ", result.Prepared), _steamBackups);
+            foreach (var warning in result.Warnings) logger.LogWarning("{Warning}", warning);
+            ScheduleStatus = $"Подготовлено обновлений: {result.Prepared.Count}. Запуск Steam…";
+        }
+        token.ThrowIfCancellationRequested();
+        if (!SteamScheduledUpdatePreparation.IsSteamRunning()) _steam.Start(executable);
+        var startup = System.Diagnostics.Stopwatch.StartNew();
+        while (startup.Elapsed < TimeSpan.FromSeconds(60))
+        {
+            token.ThrowIfCancellationRequested();
+            if ((await _steam.ScanAsync(executable)).IsRunning) return;
+            await Task.Delay(1000, token);
+        }
+        throw new TimeoutException("Steam не запустился за 60 секунд.");
+    }
+    private async Task UpdateSteamAsync()
+    {
+        _scheduleBusy = true;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _scheduledCancellation = cancellation;
+        RefreshSteamCommands();
+        try
+        {
+            await PrepareAndStartSteamAsync(Settings.SavedSettings, cancellation.Token);
+            await MonitorSteamAsync(Settings.SavedSettings, cancellation.Token);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        { ScheduleStatus = "Обслуживание остановлено."; }
+        finally { _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
+    }
     private async Task CheckScheduleAsync()
     {
         if (!Settings.CanSelectFiles || _disposed) return;
@@ -43,7 +100,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             await ScanSteamPathAsync(configuration.SteamPath);
             scheduleToken.ThrowIfCancellationRequested();
             if (_steamExecutable is null) throw new InvalidOperationException("Steam не найден. Выберите файл клиента в настройках.");
-            if (!Launchers[0].Status.Equals("Запущен")) _steam.Start(_steamExecutable);
+            await PrepareAndStartSteamAsync(configuration, scheduleToken);
             var startup = System.Diagnostics.Stopwatch.StartNew();
             bool clientStarted = false;
             while (startup.Elapsed < TimeSpan.FromSeconds(60))
@@ -82,7 +139,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void RefreshSteamCommands()
     {
         Raise(nameof(CanChangeLauncherPaths));
-        ScanSteamCommand.Refresh(); StartSteamCommand.Refresh(); MonitorSteamCommand.Refresh(); StopMonitorCommand.Refresh();
+        ScanSteamCommand.Refresh(); StartSteamCommand.Refresh(); MonitorSteamCommand.Refresh(); StopMonitorCommand.Refresh(); UpdateSteamCommand.Refresh();
     }
     private async Task MonitorSteamAsync(AppSettings? scheduledSettings = null, CancellationToken scheduleToken = default)
     {
@@ -191,6 +248,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public MainViewModel(SettingsViewModel settings, LoggingService logs, AppPaths paths)
     {
         Settings = settings; _logs = logs; _scheduleStore = new(paths);
+        _steamBackups = System.IO.Path.Combine(paths.Root, "SteamManifestBackups");
+        UpdateSteamCommand = new(UpdateSteamAsync, SteamError, () => Settings.CanSelectFiles && !_monitoring && !_scheduleBusy);
         ScanSteamCommand = new(ScanSteamAsync, SteamError, () => !_monitoring && !_scheduleBusy);
         StartSteamCommand = new(StartSteamAsync, SteamError, () => _steamExecutable is not null && !_monitoring && !_scheduleBusy);
         MonitorSteamCommand = new(() => MonitorSteamAsync(), SteamError, () => _steamExecutable is not null && !_monitoring && !_scheduleBusy);

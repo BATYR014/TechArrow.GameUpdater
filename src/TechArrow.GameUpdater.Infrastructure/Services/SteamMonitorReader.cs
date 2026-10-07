@@ -93,7 +93,7 @@ public sealed class SteamMonitorReader(string executable) : IDisposable
     private void Changed(object sender, FileSystemEventArgs e) => Interlocked.Increment(ref _generation);
 
     [SupportedOSPlatform("windows")]
-    private static bool? ReadRunningGames()
+    public static bool? ReadRunningGames()
     {
         try
         {

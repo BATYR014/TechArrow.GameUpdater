@@ -78,7 +78,7 @@ public sealed class SteamService
                             throw new FormatException("Неполный манифест.");
                         long? Number(string key) => state.Values.TryGetValue(key, out var value) && long.TryParse(value, out var number) && number >= 0 ? number : null;
                         updates.Add(new(id, name, Number("StateFlags"), Number("BytesToDownload"), Number("BytesDownloaded"),
-                            Number("BytesToStage"), Number("BytesStaged")));
+                            Number("BytesToStage"), Number("BytesStaged")) { ScheduledAutoUpdate = Number("ScheduledAutoUpdate") });
                         var common = Path.GetFullPath(Path.Combine(apps, "common")) + Path.DirectorySeparatorChar;
                         var install = Path.GetFullPath(Path.Combine(common, directory));
                         if (!install.StartsWith(common, StringComparison.OrdinalIgnoreCase)) throw new FormatException("Некорректный путь игры.");
@@ -122,13 +122,13 @@ public sealed class SteamService
             }
     }
 
-    private sealed class Node
+    internal sealed class Node
     {
         public Dictionary<string, string> Values { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, Node> Children { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
-    private static Node Parse(string text)
+    internal static Node Parse(string text)
     {
         var tokens = Regex.Matches(text, "//[^\\r\\n]*|\"(?:\\\\.|[^\"\\\\])*\"|[{}]|[^\\s{}\"]+")
             .Select(m => m.Value).Where(t => !t.StartsWith("//")).ToArray();

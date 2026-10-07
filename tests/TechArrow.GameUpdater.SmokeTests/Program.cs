@@ -5,11 +5,43 @@ using TechArrow.GameUpdater.Infrastructure.Services;
 var root = Path.Combine(Path.GetTempPath(), "TechArrowTests-" + Guid.NewGuid());
 try
 {
-    var paths = new AppPaths(root);
+    var paths = new AppPaths(Path.Combine(root, "settings-data"));
     using var service = new SettingsService(paths, NullLogger<SettingsService>.Instance);
     var defaults = await service.LoadAsync(default);
+    var scheduledManifest = "\"AppState\"\n{\n\t\"appid\" \"3527290\"\n\t\"name\" \"PEAK\"\n\t\"StateFlags\" \"6\"\n\t\"AutoUpdateBehavior\" \"0\"\n\t\"ScheduledAutoUpdate\" \"1792366519\"\n\t\"InstalledDepots\" { \"3527291\" { \"manifest\" \"506013008200123818\" } }\n}";
+    var preparedManifest = SteamScheduledUpdatePreparation.PrepareCandidate(scheduledManifest);
+    Check(preparedManifest == scheduledManifest.Replace("\"AutoUpdateBehavior\" \"0\"", "\"AutoUpdateBehavior\" \"2\"").Replace("\"ScheduledAutoUpdate\" \"1792366519\"", "\"ScheduledAutoUpdate\" \"0\""), "offline candidate changes only scheduling and priority");
+    var queueLibrary = Path.Combine(root, "queue-library");
+    var secondQueueLibrary = Path.Combine(root, "second-queue-library");
+    Directory.CreateDirectory(Path.Combine(queueLibrary, "steamapps"));
+    Directory.CreateDirectory(Path.Combine(secondQueueLibrary, "steamapps"));
+    var peakManifestPath = Path.Combine(queueLibrary, "steamapps", "appmanifest_3527290.acf");
+    var redistributablesPath = Path.Combine(secondQueueLibrary, "steamapps", "appmanifest_228980.acf");
+    var redistributablesManifest = scheduledManifest.Replace("3527290", "228980").Replace("PEAK", "Steamworks Common Redistributables");
+    await File.WriteAllTextAsync(peakManifestPath, scheduledManifest);
+    await File.WriteAllTextAsync(redistributablesPath, redistributablesManifest);
+    var queueBackups = Path.Combine(root, "queue-backups");
+    await Throws<InvalidOperationException>(() => Task.Run(() => SteamScheduledUpdatePreparation.PrepareLibraries([queueLibrary], queueBackups, default, () => true)));
+    Check(await File.ReadAllTextAsync(peakManifestPath) == scheduledManifest && !Directory.Exists(queueBackups), "running Steam prevents writes and backups");
+    var queueResult = SteamScheduledUpdatePreparation.PrepareLibraries([queueLibrary, secondQueueLibrary, queueLibrary], queueBackups, default, () => false);
+    Check(queueResult.Prepared.Count == 2 && queueResult.Warnings.Count == 0, "all libraries include Steamworks packages and duplicate libraries are ignored");
+    Check(await File.ReadAllTextAsync(peakManifestPath) == preparedManifest, "pending game receives immediate update settings");
+    Check((await File.ReadAllTextAsync(redistributablesPath)).Contains("\"ScheduledAutoUpdate\" \"0\""), "Steamworks package delay is cleared");
+    var originals = Directory.GetFiles(queueBackups, "*.acf", SearchOption.AllDirectories);
+    Check(originals.Length == 2 && originals.Any(path => File.ReadAllText(path) == scheduledManifest) && originals.Any(path => File.ReadAllText(path) == redistributablesManifest), "exact original manifests are backed up outside Steam");
+    Check(SteamScheduledUpdatePreparation.PrepareLibraries([queueLibrary, secondQueueLibrary], queueBackups, default, () => false).Prepared.Count == 0, "prepared updates are not rewritten repeatedly");
+    await File.WriteAllTextAsync(peakManifestPath, scheduledManifest);
+    var offlineChecks = 0;
+    await Throws<InvalidOperationException>(() => Task.Run(() => SteamScheduledUpdatePreparation.PrepareLibraries([queueLibrary], queueBackups, default, () => ++offlineChecks >= 3)));
+    Check(await File.ReadAllTextAsync(peakManifestPath) == scheduledManifest, "Steam starting before commit prevents manifest replacement");
+    Check(Directory.GetFiles(Path.Combine(queueLibrary, "steamapps"), "*.tmp").Length == 0, "aborted preparation removes its temporary file");
+    using var queueCancellation = new CancellationTokenSource(); queueCancellation.Cancel();
+    await Throws<OperationCanceledException>(() => Task.Run(() => SteamScheduledUpdatePreparation.PrepareLibraries([queueLibrary], queueBackups, queueCancellation.Token, () => false)));
+    await Throws<InvalidDataException>(() => Task.Run(() => SteamScheduledUpdatePreparation.PrepareCandidate(scheduledManifest.Replace("\"StateFlags\" \"6\"", "\"StateFlags\" \"4\""))));
+    await Throws<InvalidDataException>(() => Task.Run(() => SteamScheduledUpdatePreparation.PrepareCandidate(scheduledManifest.Replace("\"StateFlags\" \"6\"", "\"StateFlags\" \"1048582\""))));
+    await Throws<InvalidDataException>(() => Task.Run(() => SteamScheduledUpdatePreparation.PrepareCandidate(scheduledManifest.Replace("\"AutoUpdateBehavior\" \"0\"", "\"AutoUpdateBehavior\" \"0\"\n\t\"AutoUpdateBehavior\" \"1\""))));
     Check(defaults.GraceSeconds == 90 && defaults.IdleSeconds == 60 && !defaults.AllowForceClose && !defaults.ParallelUpdates, "safe defaults");
-    Check(!Directory.Exists(root), "load missing configuration is read-only");
+    Check(!Directory.Exists(paths.Root), "load missing configuration is read-only");
     Directory.CreateDirectory(Path.GetDirectoryName(paths.SettingsFile)!);
     await File.WriteAllTextAsync(paths.SettingsFile, "{\"SchemaVersion\":1,\"SteamPath\":\"legacy-steam.exe\"}");
     var legacy = await service.LoadAsync(default);
@@ -111,6 +143,16 @@ try
     await File.WriteAllTextAsync(paths.ScheduleStateFile, "{broken");
     await Throws<System.Text.Json.JsonException>(() => Task.Run(() => stateStore.TryClaim(occurrence.AddDays(14))));
     Console.WriteLine("All smoke checks passed.");
+    if (args.Length == 3 && args[0] == "--prepare-steam-candidate")
+    {
+        var inputPath = Path.GetFullPath(args[1]);
+        var outputPath = Path.GetFullPath(args[2]);
+        if (File.Exists(outputPath) || string.Equals(inputPath, outputPath, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Тестовая копия не должна заменять существующий файл.");
+        var candidate = SteamScheduledUpdatePreparation.PrepareCandidate(await File.ReadAllTextAsync(inputPath));
+        await File.WriteAllTextAsync(outputPath, candidate, new System.Text.UTF8Encoding(false));
+        Console.WriteLine("Prepared separate offline candidate: " + outputPath);
+    }
 }
 finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
 static void Check(bool ok, string name) { if (!ok) throw new Exception(name); Console.WriteLine("PASS " + name); }

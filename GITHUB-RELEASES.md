@@ -17,3 +17,15 @@ restart automatically. Paths and settings remain local on each computer.
 The configured repository is https://github.com/BATYR014/TechArrow.GameUpdater.
 Both local and workflow-generated installers include this update source.
 No client GitHub token is needed.
+
+Version 0.2.1 adds **Запустить обновления Steam** and prepares scheduled
+updates during weekly maintenance. It scans all Steam libraries, including
+Steamworks Common Redistributables, and changes only installed, update-required
+manifests (StateFlags 6) with a positive ScheduledAutoUpdate timestamp.
+Steam must be closed during preparation. A running client is gracefully
+restarted only when game status and manifests show it is idle; otherwise the
+operation reports why it cannot proceed. Original manifests are backed up under
+%LOCALAPPDATA%\TechArrow\GameUpdater\SteamManifestBackups before replacement.
+Prepared titles retain immediate-update priority. Steam still controls network,
+login and download restrictions. Actual download triggering was verified on PEAK;
+Steamworks preparation is covered by tests but has not yet been verified live.
