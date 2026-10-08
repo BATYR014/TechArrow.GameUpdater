@@ -28,6 +28,7 @@ public sealed class LauncherProcessReader : ILauncherProcessReader
     private readonly string? _steamExecutable;
     private Dictionary<string, (ulong Io, long Cpu)> _previous = [];
     private DateTimeOffset? _previousTime;
+    private Dictionary<string, ActivityCounter> _previousActivity = [];
     public LauncherProcessReader(LauncherStartRequest request, AppSettings? configuration = null)
     {
         var executable = LauncherStartupService.ResolveExecutable(request) ?? throw new InvalidDataException("Путь клиента не выбран.");
@@ -57,7 +58,7 @@ public sealed class LauncherProcessReader : ILauncherProcessReader
         var candidates = raw.Where(item => _profile.IsFrontend(item.Name) || _profile.IsHelper(item.Name)).ToArray();
         foreach (var item in candidates)
         {
-            if (item.Session != _session && !(_cardIndex is 3 or 4 && item.Session == 0 && _profile.IsHelper(item.Name))) continue;
+            if (item.Session != _session && !(_cardIndex is 0 or 3 or 4 && item.Session == 0 && _profile.IsHelper(item.Name))) continue;
             if (!TryRead(item.Id, out var path, out var started, out var io, out var cpu))
             {
                 // Do not close if a potentially associated client/helper cannot be inspected.
@@ -66,6 +67,8 @@ public sealed class LauncherProcessReader : ILauncherProcessReader
             bool trustedPath = LauncherProcessProfile.Within(path, _directory) || _cardIndex == 3 &&
                 item.Name.Equals("Agent.exe", StringComparison.OrdinalIgnoreCase) && LauncherProcessProfile.Within(path,
                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Battle.net", "Agent"));
+            if (_cardIndex == 0 && item.Name.Equals("SteamService.exe", StringComparison.OrdinalIgnoreCase) &&
+                LauncherProcessProfile.Within(path, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFilesX86), "Steam"))) trustedPath = true;
             if (!trustedPath) continue;
             var frontend = _profile.IsFrontend(item.Name) && item.Session == _session;
             processes.Add(new(item.Id, started, path, frontend));
@@ -87,10 +90,27 @@ public sealed class LauncherProcessReader : ILauncherProcessReader
                 cpuRate += TimeSpan.FromTicks(pair.Value.Cpu - previous.Cpu).TotalSeconds / elapsed;
             }
         }
+        var activity = LauncherActivityCollector.Shared.Read(processes);
+        var activityCounters = activity.Counters.ToDictionary(p => p.Id + ":" + p.Started);
+        bool separateMeasured = measured && activity.Reliable && activityCounters.Count == counters.Count && counters.Keys.All(activityCounters.ContainsKey);
+        double networkRate = 0, diskRate = 0;
+        if (separateMeasured)
+        {
+            var elapsed = (now - _previousTime!.Value).TotalSeconds;
+            foreach (var pair in activityCounters)
+            {
+                if (!_previousActivity.TryGetValue(pair.Key, out var previous) || pair.Value.Network < previous.Network || pair.Value.Disk < previous.Disk)
+                { separateMeasured = false; break; }
+                networkRate += (pair.Value.Network - previous.Network) / elapsed;
+                diskRate += (pair.Value.Disk - previous.Disk) / elapsed;
+            }
+        }
+        _previousActivity = activityCounters;
         _previous = counters; _previousTime = now;
         var busy = BusyReason(raw, processes);
         var detail = !reliable ? "Не удалось прочитать процессы клиента или его помощников. Закрытие заблокировано." : busy ?? "";
-        return new(new(now, running, reliable, busy is not null, measured, identity, ioRate, cpuRate, detail), processes);
+        if (running && !activity.Reliable) detail = activity.Error;
+        return new(new(now, running, reliable, busy is not null, measured, identity, ioRate, cpuRate, detail, separateMeasured, networkRate, diskRate), processes);
     }
     private string? BusyReason(IReadOnlyList<ProcessRow> all, IReadOnlyList<LauncherProcessIdentity> group)
     {

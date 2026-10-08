@@ -9,6 +9,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly ScheduleStateStore _scheduleStore;
     private readonly CancellationTokenSource _lifetime = new();
     private bool _scheduleBusy;
+    private bool _automaticMaintenance, _collectorWasEnabled;
+    private string _collectorStatus = "Измерения сети и диска выключены.";
+    public string CollectorStatus { get => _collectorStatus; private set => Set(ref _collectorStatus, value); }
+    public async Task EnableActivityCollectorAsync()
+    {
+        if (!CanChangeLauncherPaths) return;
+        try { await LauncherActivityCollector.Shared.EnsureAsync(_lifetime.Token); CollectorStatus = "Измерения включены. Можно запустить обслуживание или дождаться расписания."; }
+        catch (Exception ex) { CollectorStatus = "Измерения не включены: " + ex.Message; }
+    }
     private CancellationTokenSource? _scheduledCancellation;
     private DateTimeOffset? _handledOccurrence;
     private string _nextMaintenance = "Расписание выключено", _scheduleStatus = "";
@@ -93,6 +102,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
     private async Task MonitorOtherLaunchersAsync(IReadOnlyList<LauncherStartRequest> requests, AppSettings configuration, CancellationToken token)
     {
+        if (requests.Count == 0) return;
+        try { await LauncherActivityCollector.Shared.EnsureAsync(token, allowElevation: !_automaticMaintenance); }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            foreach (var request in requests) { Launchers[request.CardIndex].Status = "Измерения недоступны"; Launchers[request.CardIndex].Detail = "Сеть и диск не измеряются. Клиент оставлен открытым: " + ex.Message; }
+            RecordDetail("Сборщик сети и диска не запущен; автозакрытие остальных клиентов заблокировано.", true); return;
+        }
         await Task.WhenAll(requests.Select(async request =>
         {
             var card = Launchers[request.CardIndex];
@@ -104,11 +121,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             try
             {
                 var reader = await Task.Run(() => new LauncherProcessReader(request, configuration with { SteamPath = configuration.SteamPath ?? _steamExecutable }), token);
-                var policy = new LauncherIdlePolicy(started, configuration.OtherLauncherIdleSeconds, configuration.GraceSeconds);
+                var policy = new LauncherIdlePolicy(started, configuration.OtherLauncherIdleSeconds, configuration.GraceSeconds,
+                    configuration.NetworkThresholdKb, configuration.DiskThresholdMb, requireSeparateMeasurement: true);
                 while (true)
                 {
                     token.ThrowIfCancellationRequested();
                     var reading = await Task.Run(reader.Read, token);
+                    card.ActivityText = reading.Sample.HasSeparateMeasurement ? $"Сеть: {reading.Sample.NetworkBytesPerSecond / 1024:F1} КБ/с · Диск: {reading.Sample.DiskBytesPerSecond / 1048576:F2} МБ/с" : "Сеть и диск: ожидание данных";
                     token.ThrowIfCancellationRequested();
                     observedRunning |= reading.Sample.IsRunning;
                     if (!observedRunning && !reading.Sample.IsRunning)
@@ -118,7 +137,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                         card.Status = "Ожидание запуска"; card.Detail = "Ожидаем процессы основного клиента…";
                         await Task.Delay(5000, token); continue;
                     }
-                    if (!reading.Sample.Reliable)
+                    if (!reading.Sample.Reliable || !reading.Sample.HasSeparateMeasurement)
                     {
                         unavailableSince ??= reading.Sample.Timestamp;
                         if (reading.Sample.Timestamp - unavailableSince >= TimeSpan.FromMinutes(configuration.StuckTimeoutMinutes))
@@ -186,7 +205,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         { _runCancelled = true; AllUpdateStatus = "Обслуживание остановлено. Уже открытые клиенты продолжают работать."; }
-        finally { _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
+        finally { LauncherActivityCollector.Shared.Dispose(); _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
     }
     private async Task PrepareAndStartSteamAsync(AppSettings configuration, CancellationToken token)
     {
@@ -243,7 +262,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         { _runCancelled = true; ScheduleStatus = "Обслуживание остановлено."; }
-        finally { _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
+        finally { LauncherActivityCollector.Shared.Dispose(); _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
     }
     private async Task CheckScheduleAsync()
     {
@@ -283,6 +302,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 logger.LogInformation("{Status}", ScheduleStatus); return;
             }
             BeginRun("По расписанию"); recorded = true;
+            _automaticMaintenance = true;
             ScheduleStatus = "Запуск клиентов по расписанию…";
             var clients = await StartOtherLaunchersAsync(configuration, scheduleToken);
             AutoCloseSteam = configuration.ScheduleAutoCloseSteam;
@@ -298,7 +318,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             RecordDetail(ex.Message, true);
             if (!_disposed) { ScheduleStatus = "Ошибка расписания: " + ex.Message; logger.LogError(ex, "Ошибка обслуживания по расписанию"); }
         }
-        finally { if (recorded) FinishRun(); _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
+        finally { if (recorded) { _automaticMaintenance = false; FinishRun(); } LauncherActivityCollector.Shared.Dispose(); _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
     }
     private CancellationTokenSource? _monitorCancellation;
     private bool _monitoring, _disposed, _autoCloseSteam;
@@ -328,6 +348,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             cancellation.Token.ThrowIfCancellationRequested();
             if (_steamExecutable is null) throw new InvalidOperationException("Сначала укажите рабочий путь Steam.");
             var executable = _steamExecutable;
+            try { await LauncherActivityCollector.Shared.EnsureAsync(cancellation.Token, allowElevation: !_automaticMaintenance); }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
+            catch (Exception ex) { RecordDetail("Steam: измерения сети и диска недоступны; автозакрытие заблокировано. " + ex.Message, true); }
+            var activityReader = new LauncherProcessReader(new(0, "Steam", executable), settings);
+            var activityPolicy = new LauncherIdlePolicy(DateTimeOffset.UtcNow, settings.IdleSeconds, settings.GraceSeconds,
+                settings.NetworkThresholdKb, settings.DiskThresholdMb, requireSeparateMeasurement: true);
             using var reader = new SteamMonitorReader(executable);
             var policy = new SteamCompletionPolicy(settings.IdleSeconds, settings.GraceSeconds, settings.StuckTimeoutMinutes);
             var logger = _logs.CreateLogger("SteamMonitor");
@@ -340,13 +366,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 var reading = await Task.Run(reader.Read, cancellation.Token);
                 cancellation.Token.ThrowIfCancellationRequested();
                 var decision = policy.Evaluate(reading.Sample);
+                var activity = await Task.Run(activityReader.Read, cancellation.Token);
+                Launchers[0].ActivityText = activity.Sample.HasSeparateMeasurement ? $"Сеть: {activity.Sample.NetworkBytesPerSecond / 1024:F1} КБ/с · Диск: {activity.Sample.DiskBytesPerSecond / 1048576:F2} МБ/с" : "Сеть и диск: ожидание данных";
+                var activityDecision = activityPolicy.Evaluate(activity.Sample);
                 foreach (var update in reading.Sample.Updates)
                 {
                     if (update.Pending) observed.Add(update.Id);
                     else if (reading.Sample.Reliable && update.Complete && observed.Remove(update.Id))
                         RecordDetail(update.Name + ": скачивание и установка подтверждены манифестом.");
                 }
-                MonitorStatus = decision.State; MonitorDetail = decision.Detail;
+                MonitorStatus = decision.ReadyToClose && AutoCloseSteam && !activityDecision.ReadyToClose ? activityDecision.State : decision.State;
+                MonitorDetail = decision.Detail + "\n" + activityDecision.Detail;
                 UpdateText = string.Join(Environment.NewLine, reading.Sample.Updates.Select(u => u.Display));
                 SteamWarnings = string.Join(Environment.NewLine, reading.Inventory.Warnings);
                 Launchers[0].Games = reading.Inventory.Games;
@@ -358,15 +388,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     lastState = decision.State;
                 }
                 if (!reading.Sample.IsRunning) break;
-                if (decision.ReadyToClose && AutoCloseSteam)
+                if (decision.ReadyToClose && AutoCloseSteam && activityDecision.ReadyToClose)
                 {
                     // Re-read immediately before sending the exit request. Any activity resets the countdown.
                     var finalReading = await Task.Run(reader.Read, cancellation.Token);
                     var finalDecision = policy.Evaluate(finalReading.Sample);
+                    var finalActivity = await Task.Run(activityReader.Read, cancellation.Token);
+                    var finalActivityDecision = activityPolicy.Evaluate(finalActivity.Sample);
                     cancellation.Token.ThrowIfCancellationRequested();
-                    if (!AutoCloseSteam || !finalDecision.ReadyToClose)
+                    if (!AutoCloseSteam || !finalDecision.ReadyToClose || !finalActivityDecision.ReadyToClose)
                     {
-                        MonitorStatus = finalDecision.State; MonitorDetail = finalDecision.Detail;
+                        MonitorStatus = finalDecision.State; MonitorDetail = finalDecision.Detail + "\n" + finalActivityDecision.Detail;
                         await Task.Delay(TimeSpan.FromSeconds(3), cancellation.Token);
                         continue;
                     }
@@ -390,7 +422,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         { if (!_disposed) { MonitorStatus = "Ошибка мониторинга"; MonitorDetail = ex.Message; SteamError(ex); } }
         finally
         {
-            _monitorCancellation = null; _monitoring = false;
+            _monitorCancellation = null; _monitoring = false; if (!_scheduleBusy) LauncherActivityCollector.Shared.Dispose();
             if (!_disposed) RefreshSteamCommands();
         }
     }
@@ -473,6 +505,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         var path = LauncherPath(index); var card = Launchers[index];
         card.Icon = null;
+        card.ActivityText = "";
         if (string.IsNullOrWhiteSpace(path)) { card.Status = "Не добавлен"; card.Detail = "Выберите .exe лаунчера в настройках."; return; }
         if (!System.IO.File.Exists(path)) { card.Status = "Файл не найден"; card.Detail = "Сохранённый файл отсутствует. Выберите актуальный .exe в настройках."; return; }
         try
@@ -490,6 +523,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
     private async void OnTick(object? sender, EventArgs e)
     {
+        var collectorEnabled = LauncherActivityCollector.Shared.IsEnabled;
+        if (_collectorWasEnabled != collectorEnabled) { _collectorWasEnabled = collectorEnabled; CollectorStatus = collectorEnabled ? "Измерения включены. Можно запустить обслуживание или дождаться расписания." : "Измерения выключены. Для расписания включите сборщик заранее."; }
         if (_steamExecutable is not null)
         {
             var processes = System.Diagnostics.Process.GetProcessesByName("steam");
@@ -503,5 +538,5 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (HistoryText.Length == 0) HistoryText = "История пока пуста.";
         try { await CheckScheduleAsync(); } catch (Exception ex) { if (!_disposed) ScheduleStatus = "Ошибка расписания: " + ex.Message; }
     }
-    public void Dispose() { _disposed = true; Settings.PropertyChanged -= OnSettingsChanged; _lifetime.Cancel(); _scheduledCancellation?.Cancel(); _monitorCancellation?.Cancel(); _timer.Stop(); _timer.Tick -= OnTick; }
+    public void Dispose() { _disposed = true; Settings.PropertyChanged -= OnSettingsChanged; _lifetime.Cancel(); LauncherActivityCollector.Shared.Dispose(); _scheduledCancellation?.Cancel(); _monitorCancellation?.Cancel(); _timer.Stop(); _timer.Tick -= OnTick; }
 }

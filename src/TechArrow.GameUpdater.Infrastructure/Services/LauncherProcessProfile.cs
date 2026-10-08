@@ -4,6 +4,7 @@ public sealed record LauncherProcessProfile(string[] Frontends, string[] Helpers
 {
     public static LauncherProcessProfile For(int index) => index switch
     {
+        0 => new(["steam.exe"], ["steamwebhelper.exe", "SteamService.exe"], ["Steam"]),
         1 => new(["EpicGamesLauncher.exe"], ["EpicWebHelper.exe", "EpicOnlineServicesUserHelper.exe", "EpicOnlineServicesUIHelper.exe"], ["Epic Games Launcher", "Epic Games"]),
         2 => new(["lgc.exe", "wgc.exe", "GameCenter.exe", "LestaGameCenter.exe"], ["lgc_renderer.exe", "wgc_renderer.exe", "wgc_browser.exe", "wgc_agent.exe", "wgc_helper.exe", "QtWebEngineProcess.exe"], ["Lesta Game Center", "Lesta Games", "Lesta"]),
         3 => new(["Battle.net.exe", "Battle.net Launcher.exe"], ["Battle.net Helper.exe", "Agent.exe"], ["Battle.net", "Blizzard Battle.net"]),

@@ -66,3 +66,11 @@ selecting launcher files, routes them to the matching settings field, and checks
 configured paths immediately. Cards use verified official website/CDN icons with
 a local cache and executable icon fallback. Login remains managed by each client.
 Shared GameCenter/wgc names use the selected vendor when metadata is ambiguous.
+
+Version 0.2.8 measures per-process network and physical disk bytes independently
+using a separate elevated ETW helper. UAC consent is requested at monitoring start;
+launchers and the GUI remain unelevated. Missing measurements block automatic
+closure. Both configurable thresholds, CPU/cached-I/O guards, idle and grace are
+required. Steam additionally requires manifest-confirmed completion. The helper
+stops when the per-user pipe disconnects; no packet content or trace files are
+saved. Live localhost network and write-through disk checks passed on Windows.

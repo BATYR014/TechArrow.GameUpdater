@@ -1,6 +1,8 @@
 global using System.IO;
 using Microsoft.Win32;
 using TechArrow.GameUpdater.Services;
+if (args.Length == 2 && args[0] == "--activity-collector") { LauncherActivityCollector.RunHelper(args[1]); return; }
+if (args.Contains("--live-activity-check")) { await ActivityChecks.LiveAsync(args.Length > 1 ? args[1] : null); return; }
 Velopack.VelopackApp.Build().SetAutoApplyOnStartup(false).Run();
 await LauncherChecks.RunAsync();
 var testKey = @"Software\TechArrow\StartupTests\" + Guid.NewGuid().ToString("N");

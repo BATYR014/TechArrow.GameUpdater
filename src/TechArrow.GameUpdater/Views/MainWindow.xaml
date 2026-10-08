@@ -34,7 +34,7 @@
                         <TextBlock Text="Автозакрытие остальных лаунчеров" FontSize="20" FontWeight="SemiBold"/>
                         <CheckBox Content="Закрывать Epic, Lesta, Battle.net, EA, Riot, VK Play и Wargaming после простоя" IsChecked="{Binding Settings.AutoCloseOtherLaunchers}" Foreground="{StaticResource TextBrush}" Margin="0,14,0,12"/>
                         <TextBlock Text="Работает при «Обновить всё» и по расписанию. По умолчанию: 5 минут без существенной активности + пауза перед закрытием. Новая активность сбрасывает отсчёт. Если обнаружена игра, ввод пользователя или другое активное окно, закрытие откладывается. У этих клиентов простой не подтверждает завершение всей очереди: при паузе или потере сети клиент тоже может перестать передавать данные." Style="{StaticResource Caption}" FontSize="12"/>
-                        <TextBlock Text="Выход запрашивается через трей или закрытие окна. Если клиент остаётся в фоне, карточка и журнал покажут это. Игровые процессы и фоновые службы принудительно не завершаются. Чтобы сохранить выбранный режим для следующих запусков, нажмите «Сохранить настройки»." Style="{StaticResource Caption}" FontSize="12" Margin="0,8,0,0"/>
+                        <TextBlock Text="Для измерения сети и диска Windows попросит подтвердить запуск отдельного сборщика. При отказе или потере данных закрытие блокируется. Выход запрашивается через трей или закрытие окна. Если клиент остаётся в фоне, карточка и журнал покажут это. Игровые процессы и фоновые службы принудительно не завершаются. Чтобы сохранить выбранный режим для следующих запусков, нажмите «Сохранить настройки»." Style="{StaticResource Caption}" FontSize="12" Margin="0,8,0,0"/>
                     </StackPanel></Border>
                     <ItemsControl ItemsSource="{Binding Launchers}">
                         <ItemsControl.ItemTemplate><DataTemplate>
@@ -47,6 +47,7 @@
                                     </Grid>
                                     <Border Height="1" Background="#2B3749" Margin="0,18,0,14"/>
                                     <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" FontSize="14"/>
+                                    <TextBlock Text="{Binding ActivityText}" Foreground="#ADFFED" Margin="0,8,0,0"><TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Style.Triggers><DataTrigger Binding="{Binding ActivityText}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
                                     <ItemsControl ItemsSource="{Binding Games}" Margin="0,12,0,0">
                                         <ItemsControl.ItemTemplate><DataTemplate>
                                             <StackPanel Margin="0,8,0,8"><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding InstallPath}" Style="{StaticResource Caption}" FontSize="12"/></StackPanel>
@@ -142,16 +143,19 @@
                     </StackPanel></Border>
                     <Border Style="{StaticResource Card}"><StackPanel>
                         <TextBlock Text="Мониторинг активности" FontSize="21" FontWeight="SemiBold"/>
+                        <Button Content="Включить измерения сети и диска" Click="EnableMeasurements_Click" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,16,0,8" IsEnabled="{Binding DataContext.CanChangeLauncherPaths, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                        <TextBlock Text="{Binding DataContext.CollectorStatus, RelativeSource={RelativeSource AncestorType=Window}}" Style="{StaticResource Caption}"/>
+                        <TextBlock Text="Для обслуживания по расписанию включите измерения заранее и оставьте программу в трее. После обслуживания сборщик завершится. Ночью запрос UAC не показывается: если сборщик не включён, клиенты останутся открытыми." Style="{StaticResource Caption}" Margin="0,8,0,0"/>
                         <TextBlock Text="Время простоя и пауза фиксируются при запуске мониторинга. Изменения применяются к следующей сессии." Style="{StaticResource Caption}" Margin="0,8,0,22"/>
                         <UniformGrid><UniformGrid.Style><Style TargetType="UniformGrid"><Setter Property="Columns" Value="2"/><Style.Triggers><DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=Window}}" Value="Compact"><Setter Property="Columns" Value="1"/></DataTrigger></Style.Triggers></Style></UniformGrid.Style>
-                            <StackPanel Margin="0,0,20,0"><TextBlock Text="Порог сети · КБ/с (резерв)"/><TextBox Text="{Binding Network, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Порог сети в КБ/с"/></StackPanel>
-                            <StackPanel><TextBlock Text="Порог записи · МБ/с (резерв)"/><TextBox Text="{Binding Disk, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Порог записи на диск в МБ/с"/></StackPanel>
+                            <StackPanel Margin="0,0,20,0"><TextBlock Text="Порог сети · КБ/с"/><TextBox Text="{Binding Network, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Порог сети в КБ/с"/></StackPanel>
+                            <StackPanel><TextBlock Text="Порог диска · МБ/с"/><TextBox Text="{Binding Disk, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Порог записи на диск в МБ/с"/></StackPanel>
                             <StackPanel Margin="0,0,20,0"><TextBlock Text="Время простоя · секунды"/><TextBox Text="{Binding Idle, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Время простоя в секундах"/></StackPanel>
                             <StackPanel><TextBlock Text="Пауза перед закрытием · секунды"/><TextBox Text="{Binding Grace, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Grace Period в секундах"/></StackPanel>
                             <StackPanel Margin="0,0,20,0"><TextBlock Text="Простой остальных клиентов · секунды (60–86400)"/><TextBox Text="{Binding OtherIdle, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Простой остальных лаунчеров в секундах"/></StackPanel>
                         </UniformGrid>
                         <CheckBox Content="Автоматически закрывать остальные лаунчеры после простоя" IsChecked="{Binding AutoCloseOtherLaunchers}" Foreground="{StaticResource TextBrush}" Margin="0,12,0,12"/>
-                        <TextBlock Text="Мониторинг использует манифесты, журнал и изменения файлов. Пороги сети и диска пока только сохраняются. Автозакрытие включается в обзоре для текущей сессии." Style="{StaticResource Caption}"/>
+                        <TextBlock Text="Скорости измеряются отдельно для процессов клиента и его помощников. Закрытие разрешается, когда сеть и диск ниже порогов в течение заданного времени и паузы. CPU и другие операции ввода-вывода также могут отложить закрытие. Windows запросит права администратора для отдельного сборщика; при отказе клиент останется открытым. Изменения порогов нужно сохранить." Style="{StaticResource Caption}"/>
                     </StackPanel></Border>
                     <WrapPanel Margin="0,6,0,12"><Button Content="Сохранить настройки" Command="{Binding SaveCommand}" Margin="0,0,12,8"/><Button Content="Перечитать файл" Command="{Binding ReloadCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,0,8"/></WrapPanel>
                     <TextBlock Text="{Binding Message}" Margin="0,0,0,18" AutomationProperties.LiveSetting="Polite"/>
@@ -200,7 +204,8 @@
                 <Border Style="{StaticResource Card}"><StackPanel>
                     <TextBlock Text="Что изменилось" FontSize="21" FontWeight="SemiBold"/>
                     <TextBlock Text="{Binding Updates.CurrentVersion, StringFormat=Версия {0}}" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,18,0,8"/>
-                    <TextBlock Text="• При выборе .exe программа определяет лаунчер и сразу проверяет файл.&#10;• Карточки показывают иконки с официальных сайтов; иконки сохраняются локально.&#10;• Если интернет недоступен, используется иконка выбранного .exe.&#10;• Убрано сообщение «Авторизация: неизвестно» — вход выполняется в самом клиенте." Style="{StaticResource Caption}"/>
+                    <TextBlock Text="• Добавлены отдельные измерения сети и диска процессов лаунчеров.&#10;• Автозакрытие учитывает оба порога, время простоя и паузу.&#10;• При отсутствии данных или отказе в доступе Windows клиент остаётся открытым.&#10;• Steam дополнительно подтверждает завершение по манифестам." Style="{StaticResource Caption}"/>
+                    <TextBlock Text="Версия 0.2.7" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,22,0,8"/><TextBlock Text="• Распознавание выбранного .exe, проверка пути и иконки лаунчеров с локальным кэшем." Style="{StaticResource Caption}"/>
                     <TextBlock Text="Версия 0.2.6" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,22,0,8"/>
                     <TextBlock Text="• Адаптивное меню, перенос текста и параметров, тёмная прокрутка и поддержка масштаба Windows." Style="{StaticResource Caption}"/>
                     <TextBlock Text="Версия 0.2.5" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,22,0,8"/>

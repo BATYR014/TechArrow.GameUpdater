@@ -21,6 +21,10 @@ public partial class MainWindow : Window
         UpdateLayoutMode();
     }
     private void Window_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateLayoutMode();
+    private async void EnableMeasurements_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel model) await model.EnableActivityCollectorAsync();
+    }
     private void UpdateLayoutMode() => Tag = (ActualWidth > 0 ? ActualWidth : Width) < 1000 ||
         (ActualHeight > 0 ? ActualHeight : Height) < 620 ? "Compact" : "Desktop";
     private async void ConnectClub_Click(object sender, RoutedEventArgs e)

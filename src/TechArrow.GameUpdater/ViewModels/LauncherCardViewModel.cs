@@ -10,6 +10,8 @@ public sealed class LauncherCardViewModel(string name, string plannedStage) : Ob
     public string Authorization => "Вход выполняется в самом лаунчере";
     private System.Windows.Media.ImageSource? _icon;
     public System.Windows.Media.ImageSource? Icon { get => _icon; set => Set(ref _icon, value); }
+    private string _activityText = "";
+    public string ActivityText { get => _activityText; set => Set(ref _activityText, value); }
     public string Status { get => _status; set => Set(ref _status, value); }
     public string Detail { get => _detail; set => Set(ref _detail, value); }
     public IReadOnlyList<GameInfo> Games { get => _games; set => Set(ref _games, value); }
