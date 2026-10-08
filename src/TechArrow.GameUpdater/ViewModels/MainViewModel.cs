@@ -68,12 +68,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public AsyncCommand UpdateAllCommand { get; }
     private string _allUpdateStatus = "Выберите .exe клиентов в настройках и включите в них автообновления игр. «Обновить всё» запускает мониторинг и автозакрытие после простоя.";
     public string AllUpdateStatus { get => _allUpdateStatus; private set => Set(ref _allUpdateStatus, value); }
-    private async Task<IReadOnlyList<LauncherStartRequest>> StartOtherLaunchersAsync(AppSettings configuration, CancellationToken token)
+    private async Task<IReadOnlyList<LauncherStartRequest>> StartOtherLaunchersAsync(AppSettings configuration, CancellationToken token, int? onlyCard = null)
     {
         int requested = 0, missing = 0, failed = 0;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var monitored = new List<LauncherStartRequest>();
-        foreach (var request in LauncherStartupService.Requests(configuration))
+        foreach (var request in LauncherStartupService.Requests(configuration).Where(p => !string.IsNullOrWhiteSpace(p.Executable) && (onlyCard is null || p.CardIndex == onlyCard)))
         {
             token.ThrowIfCancellationRequested();
             var card = Launchers[request.CardIndex];
@@ -176,6 +176,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
     private async Task MaintainSteamIfPresentAsync(AppSettings configuration, CancellationToken token)
     {
+        if (string.IsNullOrWhiteSpace(configuration.SteamPath)) return;
         try
         {
             await ScanSteamPathAsync(configuration.SteamPath);
@@ -198,6 +199,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             AllUpdateStatus = "Запуск выбранных клиентов…";
             var configuration = Settings.SavedSettings with { AutoCloseOtherLaunchers = Settings.AutoCloseOtherLaunchers };
+            AutoCloseSteam = configuration.AutoCloseOtherLaunchers;
             var clients = await StartOtherLaunchersAsync(configuration, cancellation.Token);
             await Task.WhenAll(MaintainSteamIfPresentAsync(configuration, cancellation.Token), MonitorOtherLaunchersAsync(clients, configuration, cancellation.Token));
             cancellation.Token.ThrowIfCancellationRequested();
@@ -206,6 +208,25 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         { _runCancelled = true; AllUpdateStatus = "Обслуживание остановлено. Уже открытые клиенты продолжают работать."; }
         finally { LauncherActivityCollector.Shared.Dispose(); _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
+    }
+    public Task UpdateLauncherAsync(string key)
+    {
+        if (!CanChangeLauncherPaths) return Task.CompletedTask;
+        return RunRecordedAsync("Обновить " + Launchers[Array.IndexOf(LauncherIdentification.Keys, key)].Name, async () =>
+    {
+        _scheduleBusy = true;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _scheduledCancellation = cancellation; RefreshSteamCommands();
+        try
+        {
+            var configuration = Settings.SavedSettings with { AutoCloseOtherLaunchers = Settings.AutoCloseOtherLaunchers };
+            var index = Array.IndexOf(LauncherIdentification.Keys, key);
+            if (index == 0) { AutoCloseSteam = configuration.AutoCloseOtherLaunchers; await MaintainSteamIfPresentAsync(configuration, cancellation.Token); }
+            else { var clients = await StartOtherLaunchersAsync(configuration, cancellation.Token, index); await MonitorOtherLaunchersAsync(clients, configuration, cancellation.Token); }
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { _runCancelled = true; }
+        finally { LauncherActivityCollector.Shared.Dispose(); _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
+        });
     }
     private async Task PrepareAndStartSteamAsync(AppSettings configuration, CancellationToken token)
     {
@@ -305,7 +326,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _automaticMaintenance = true;
             ScheduleStatus = "Запуск клиентов по расписанию…";
             var clients = await StartOtherLaunchersAsync(configuration, scheduleToken);
-            AutoCloseSteam = configuration.ScheduleAutoCloseSteam;
+            AutoCloseSteam = configuration.AutoCloseOtherLaunchers;
             ScheduleStatus = "Мониторинг выбранных клиентов запущен по расписанию.";
             logger.LogInformation("{Status}", ScheduleStatus);
             await Task.WhenAll(MaintainSteamIfPresentAsync(configuration, scheduleToken), MonitorOtherLaunchersAsync(clients, configuration, scheduleToken));
@@ -377,6 +398,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 }
                 MonitorStatus = decision.ReadyToClose && AutoCloseSteam && !activityDecision.ReadyToClose ? activityDecision.State : decision.State;
                 MonitorDetail = decision.Detail + "\n" + activityDecision.Detail;
+                Launchers[0].Status = MonitorStatus; Launchers[0].Detail = MonitorDetail;
                 UpdateText = string.Join(Environment.NewLine, reading.Sample.Updates.Select(u => u.Display));
                 SteamWarnings = string.Join(Environment.NewLine, reading.Inventory.Warnings);
                 Launchers[0].Games = reading.Inventory.Games;
@@ -480,11 +502,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         catch (Exception ex) { _historyError = "История недоступна: " + ex.Message; logs.CreateLogger("History").LogError(ex, "Не удалось прочитать историю запусков. Исходный файл сохранён."); }
         _steamBackups = System.IO.Path.Combine(paths.Root, "SteamManifestBackups");
         UpdateSteamCommand = new(() => RunRecordedAsync("Обновления Steam", UpdateSteamAsync), SteamError, () => Settings.CanSelectFiles && CanChangeLauncherPaths);
-        UpdateAllCommand = new(() => RunRecordedAsync("Обновить всё", UpdateAllAsync), SteamError, () => Settings.CanSelectFiles && CanChangeLauncherPaths);
+        UpdateAllCommand = new(() => RunRecordedAsync("Обновить всё", UpdateAllAsync), SteamError, () => HasAddedLaunchers && Settings.CanSelectFiles && CanChangeLauncherPaths);
         ScanSteamCommand = new(ScanSteamAsync, SteamError, () => CanChangeLauncherPaths);
         StartSteamCommand = new(() => RunRecordedAsync("Открыть Steam", StartSteamAsync), SteamError, () => _steamExecutable is not null && CanChangeLauncherPaths);
         MonitorSteamCommand = new(() => RunRecordedAsync("Мониторинг Steam", () => MonitorSteamAsync()), SteamError, () => _steamExecutable is not null && CanChangeLauncherPaths);
         StopMonitorCommand = new(() => { _monitorCancellation?.Cancel(); _scheduledCancellation?.Cancel(); return Task.CompletedTask; }, SteamError, () => _monitoring || _scheduleBusy);
+        for (var index = 0; index < Launchers.Count; index++) Launchers[index].Key = LauncherIdentification.Keys[index];
         Settings.PropertyChanged += OnSettingsChanged;
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _timer.Tick += OnTick; _timer.Start();
@@ -493,6 +516,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public AppUpdatesViewModel? Updates { get; set; }
     public ClubViewModel? Club { get; set; }
     public IReadOnlyList<LauncherCardViewModel> Launchers { get; } = [new("Steam", "Подготовка очереди и мониторинг"), new("Epic Games", "Мониторинг и автозакрытие"), new("Lesta Game Center", "Мониторинг и автозакрытие"), new("Battle.net", "Мониторинг и автозакрытие"), new("EA app", "Мониторинг и автозакрытие"), new("Riot Client", "Мониторинг и автозакрытие"), new("VK Play", "Мониторинг и автозакрытие"), new("Wargaming Game Center", "Мониторинг и автозакрытие")];
+    public System.Collections.ObjectModel.ObservableCollection<LauncherCardViewModel> AddedLaunchers { get; } = [];
+    public bool HasAddedLaunchers => AddedLaunchers.Count > 0;
+    public string LauncherCount => $"Добавлено клиентов: {AddedLaunchers.Count}";
     public string LogText { get => _logText; private set => Set(ref _logText, value); }
     public string LogError { get => _logError; private set => Set(ref _logError, value); }
     private void OnSettingsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -500,7 +526,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (e.PropertyName == nameof(SettingsViewModel.CanSelectFiles) && !_disposed) RefreshSteamCommands();
         var properties = new[] { "SteamPath", "EpicPath", "LestaPath", "BattleNetPath", "EaPath", "RiotPath", "VkPlayPath", "WargamingPath" };
         var index = Array.IndexOf(properties, e.PropertyName);
-        if (index >= 0 && !_disposed) RefreshLauncherCard(index);
+        if (index >= 0 && !_disposed) { RefreshLauncherCard(index); RefreshSteamCommands(); }
     }
     private string LauncherPath(int index) => index switch
     {
@@ -510,6 +536,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private async void RefreshLauncherCard(int index)
     {
         var path = LauncherPath(index); var card = Launchers[index];
+        card.ExecutablePath = path;
+        if (string.IsNullOrWhiteSpace(path)) AddedLaunchers.Remove(card);
+        else if (!AddedLaunchers.Contains(card)) AddedLaunchers.Insert(AddedLaunchers.Count(p => Array.IndexOf(LauncherIdentification.Keys, p.Key) < index), card);
+        Raise(nameof(HasAddedLaunchers)); Raise(nameof(LauncherCount));
         card.Icon = null;
         card.ActivityText = "";
         if (string.IsNullOrWhiteSpace(path)) { card.Status = "Не добавлен"; card.Detail = "Выберите .exe лаунчера в настройках."; return; }
@@ -531,7 +561,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         var collectorEnabled = LauncherActivityCollector.Shared.IsEnabled;
         if (_collectorWasEnabled != collectorEnabled) { _collectorWasEnabled = collectorEnabled; CollectorStatus = collectorEnabled ? "Измерения включены. Можно запустить обслуживание или дождаться расписания." : "Измерения выключены. Для расписания включите сборщик заранее."; }
-        if (_steamExecutable is not null)
+        if (_steamExecutable is not null && !_monitoring)
         {
             var processes = System.Diagnostics.Process.GetProcessesByName("steam");
             Launchers[0].Status = processes.Length > 0 ? "Запущен" : "Установлен";

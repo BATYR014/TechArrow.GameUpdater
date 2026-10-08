@@ -113,6 +113,18 @@ public sealed class SettingsViewModel : ObservableObject
             throw new InvalidDataException("Выберите существующий файл .exe.");
         launcher = TechArrow.GameUpdater.Infrastructure.Services.LauncherIdentification.Identify(path, launcher)
             ?? throw new InvalidDataException("Этот файл не распознан как поддерживаемый лаунчер. Выберите основной .exe клиента, а не игру или служебный процесс.");
+        await SaveLauncherPathAsync(launcher, Path.GetFullPath(path));
+        Message = "Лаунчер добавлен, путь сохранён автоматически.";
+        return launcher;
+    }
+    public async Task RemoveExecutableAsync(string launcher)
+    {
+        if (!_canSave) throw new InvalidOperationException("Дождитесь загрузки настроек.");
+        await SaveLauncherPathAsync(launcher, "");
+        Message = "Лаунчер удалён из списка. Файлы клиента и игр сохранены.";
+    }
+    private async Task SaveLauncherPathAsync(string launcher, string path)
+    {
         var settings = launcher switch
         {
             "Steam" => _loaded with { SteamPath = path },
@@ -138,8 +150,6 @@ public sealed class SettingsViewModel : ObservableObject
             case "VkPlay": VkPlayPath = path; break;
             case "Wargaming": WargamingPath = path; break;
         }
-        Message = "Лаунчер распознан, путь сохранён в соответствующем разделе. Остальные изменения можно сохранить кнопкой ниже.";
-        return launcher;
     }
     public AppSettings MonitoringSettings()
     {

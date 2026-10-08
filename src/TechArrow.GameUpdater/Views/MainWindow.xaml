@@ -10,33 +10,17 @@
                 <StackPanel Margin="0,0,8,0">
                     <TextBlock Text="Обзор лаунчеров" Style="{StaticResource PageTitle}"/>
                     <TextBlock Text="Все игровые клиенты — в одном месте." Style="{StaticResource Caption}" Margin="0,0,0,26"/>
-                    <Border Style="{StaticResource Card}" Background="#1B3038" BorderBrush="#365762" Padding="20,16">
-                        <StackPanel><TextBlock Text="Обслуживание Steam" FontWeight="SemiBold" Foreground="#ADFFED"/><TextBlock Text="Запустите загрузки в Steam и включите мониторинг. По завершении можно автоматически закрыть клиент." Style="{StaticResource Caption}" Margin="0,6,0,0"/></StackPanel>
-                    </Border>
-                    <Grid Margin="0,4,0,18"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Игровые клиенты" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="8 клиентов · мониторинг и автозакрытие" Style="{StaticResource Caption}" FontSize="13" Margin="0,5,12,0"/></StackPanel><Button Grid.Column="1" Content="Обновить всё" Command="{Binding UpdateAllCommand}" VerticalAlignment="Center" ToolTip="Steam: подготовка очереди и мониторинг. Остальные клиенты: автообновления, мониторинг процессов и закрытие после простоя."/></Grid>
-                    <Border Style="{StaticResource Card}"><StackPanel>
-                        <TextBlock Text="{Binding AllUpdateStatus}" TextWrapping="Wrap" Style="{StaticResource Caption}" Margin="0,0,0,14"/><TextBlock Text="Steam · библиотеки и обновления" FontSize="20" FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding SteamSummary}" Margin="0,10,0,8"/>
-                        <TextBlock Text="{Binding SteamLibraries}" Style="{StaticResource Caption}"/>
-                        <TextBlock Text="{Binding SteamWarnings}" Foreground="#F4D396" Margin="0,8,0,12"/>
-                        <WrapPanel><Button Content="Найти Steam и игры" Command="{Binding ScanSteamCommand}" Margin="0,0,12,8"/><Button Content="Открыть Steam" Command="{Binding StartSteamCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,0,8"/></WrapPanel>
-                        <TextBlock Text="После изменения пути нажмите «Найти Steam и игры». Авторизация и обновления выполняются в клиенте Steam." Style="{StaticResource Caption}" FontSize="12"/>
-                        <Border Height="1" Background="#2B3749" Margin="0,18,0,16"/>
-                        <TextBlock Text="{Binding MonitorStatus}" FontSize="19" FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding MonitorDetail}" Style="{StaticResource Caption}" Margin="0,8,0,12" AutomationProperties.LiveSetting="Polite"/>
-                        <TextBlock Text="{Binding UpdateText}" Margin="0,0,0,14"/>
-                        <CheckBox Content="Закрыть Steam после завершения наблюдавшихся обновлений" IsChecked="{Binding AutoCloseSteam}" Foreground="{StaticResource TextBrush}" Margin="0,0,0,16"/>
-                        <WrapPanel><Button Content="Запустить обновления Steam" Command="{Binding UpdateSteamCommand}" Margin="0,0,12,8"/><Button Content="Начать мониторинг" Command="{Binding MonitorSteamCommand}" Margin="0,0,12,8"/><Button Content="Остановить" Command="{Binding StopMonitorCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,0,8"/></WrapPanel>
-                        <TextBlock Text="«Запустить обновления Steam» подготавливает отложенные обновления во всех библиотеках и включает мониторинг. Для подготовки Steam перезапускается, если нет активных игр или загрузок. Мониторинг проверяет файлы каждые 3 секунды. Процент относится к скачиванию; установка проверяется отдельно. Простои, паузы и неизвестные данные не подтверждают завершение." Style="{StaticResource Caption}" FontSize="12"/>
-
-                    </StackPanel></Border>
-                    <Border Style="{StaticResource Card}"><StackPanel>
-                        <TextBlock Text="Автозакрытие остальных лаунчеров" FontSize="20" FontWeight="SemiBold"/>
-                        <CheckBox Content="Закрывать Epic, Lesta, Battle.net, EA, Riot, VK Play и Wargaming после простоя" IsChecked="{Binding Settings.AutoCloseOtherLaunchers}" Foreground="{StaticResource TextBrush}" Margin="0,14,0,12"/>
-                        <TextBlock Text="Работает при «Обновить всё» и по расписанию. По умолчанию: 5 минут без существенной активности + пауза перед закрытием. Новая активность сбрасывает отсчёт. Если обнаружена игра, ввод пользователя или другое активное окно, закрытие откладывается. У этих клиентов простой не подтверждает завершение всей очереди: при паузе или потере сети клиент тоже может перестать передавать данные." Style="{StaticResource Caption}" FontSize="12"/>
-                        <TextBlock Text="Для измерения сети и диска Windows попросит подтвердить запуск отдельного сборщика. При отказе или потере данных закрытие блокируется. Выход запрашивается через трей или закрытие окна. Если клиент остаётся в фоне, карточка и журнал покажут это. Игровые процессы и фоновые службы принудительно не завершаются. Чтобы сохранить выбранный режим для следующих запусков, нажмите «Сохранить настройки»." Style="{StaticResource Caption}" FontSize="12" Margin="0,8,0,0"/>
-                    </StackPanel></Border>
-                    <ItemsControl ItemsSource="{Binding Launchers}">
+                    <WrapPanel Margin="0,4,0,16">
+                        <Button Content="Добавить лаунчер" Tag="Auto" Click="ChooseExecutable_Click" IsEnabled="{Binding CanChangeLauncherPaths}" Margin="0,0,12,8"/>
+                        <Button Content="Обновить всё" Command="{Binding UpdateAllCommand}" Margin="0,0,12,8"/>
+                        <Button Content="Остановить" Command="{Binding StopMonitorCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,0,8"/>
+                    </WrapPanel>
+                    <TextBlock Text="{Binding LauncherCount}" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                    <TextBlock Text="{Binding AllUpdateStatus}" Style="{StaticResource Caption}" Margin="0,0,0,16"/>
+                    <CheckBox Content="Автоматически закрывать лаунчеры после обслуживания" IsChecked="{Binding Settings.AutoCloseOtherLaunchers}" Margin="0,0,0,12"/>
+                    <TextBlock Text="Закрытие учитывает сеть, диск и время простоя; Steam дополнительно проверяет завершение установки. Сохраните режим в настройках для следующих запусков." Style="{StaticResource Caption}" FontSize="12" Margin="0,0,0,20"/>
+                    <Border><Border.Style><Style TargetType="Border" BasedOn="{StaticResource Card}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding HasAddedLaunchers}" Value="False"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Border.Style><StackPanel><TextBlock Text="Добавьте первый лаунчер" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="Выберите .exe — программа определит клиент, сохранит путь и загрузит иконку." Style="{StaticResource Caption}" Margin="0,8,0,0"/></StackPanel></Border>
+                    <ItemsControl ItemsSource="{Binding AddedLaunchers}">
                         <ItemsControl.ItemTemplate><DataTemplate>
                             <Border Style="{StaticResource Card}" Padding="22,20">
                                 <StackPanel>
@@ -48,11 +32,14 @@
                                     <Border Height="1" Background="#2B3749" Margin="0,18,0,14"/>
                                     <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" FontSize="14"/>
                                     <TextBlock Text="{Binding ActivityText}" Foreground="#ADFFED" Margin="0,8,0,0"><TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Style.Triggers><DataTrigger Binding="{Binding ActivityText}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+                                    <Button Content="Обновить" Tag="{Binding Key}" Click="UpdateLauncher_Click" HorizontalAlignment="Left" Margin="0,16,0,0" IsEnabled="{Binding DataContext.CanChangeLauncherPaths, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                    <Expander Header="Установленные игры" Margin="0,16,0,0" Foreground="{StaticResource TextBrush}"><Expander.Style><Style TargetType="Expander"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding IsSteam}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Expander.Style>
                                     <ItemsControl ItemsSource="{Binding Games}" Margin="0,12,0,0">
                                         <ItemsControl.ItemTemplate><DataTemplate>
                                             <StackPanel Margin="0,8,0,8"><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding InstallPath}" Style="{StaticResource Caption}" FontSize="12"/></StackPanel>
                                         </DataTemplate></ItemsControl.ItemTemplate>
                                     </ItemsControl>
+                                    </Expander>
                                 </StackPanel>
                             </Border>
                         </DataTemplate></ItemsControl.ItemTemplate>
@@ -67,56 +54,16 @@
                     <TextBlock Text="Настройки" Style="{StaticResource PageTitle}"/>
                     <TextBlock Text="Выберите файлы лаунчеров и параметры обслуживания." Style="{StaticResource Caption}" Margin="0,0,0,26"/>
                     <Border Style="{StaticResource Card}"><StackPanel>
-                        <TextBlock Text="Пути лаунчеров" FontSize="21" FontWeight="SemiBold"/>
-                        <TextBlock Text="Нажмите «Выбрать .exe» и выберите файл клиента. Путь сохранится автоматически. Для Steam сразу найдутся библиотеки и игры." Style="{StaticResource Caption}" Margin="0,8,0,22"/>
-                        <Label Target="{Binding ElementName=SteamPathInput}" Foreground="#F1F5FC" Padding="0" Content="Steam"/>
-                        <Grid Margin="0,7,0,18" IsEnabled="{Binding DataContext.CanChangeLauncherPaths, RelativeSource={RelativeSource AncestorType=Window}}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBox x:Name="SteamPathInput" Text="{Binding SteamPath, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Путь Steam" Margin="0,0,12,0"/>
-                            <Button Grid.Column="1" Content="Выбрать .exe" Tag="Steam" Click="ChooseExecutable_Click" Style="{StaticResource SecondaryButton}" VerticalAlignment="Top" IsEnabled="{Binding CanSelectFiles}" AutomationProperties.Name="Выбрать файл Steam"/>
-                        </Grid>
-                        <Label Target="{Binding ElementName=EpicPathInput}" Foreground="#F1F5FC" Padding="0" Content="Epic Games Launcher"/>
-                        <Grid Margin="0,7,0,18" IsEnabled="{Binding DataContext.CanChangeLauncherPaths, RelativeSource={RelativeSource AncestorType=Window}}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBox x:Name="EpicPathInput" Text="{Binding EpicPath, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Путь Epic Games Launcher" Margin="0,0,12,0"/>
-                            <Button Grid.Column="1" Content="Выбрать .exe" Tag="Epic" Click="ChooseExecutable_Click" Style="{StaticResource SecondaryButton}" VerticalAlignment="Top" IsEnabled="{Binding CanSelectFiles}" AutomationProperties.Name="Выбрать файл Epic"/>
-                        </Grid>
-                        <Label Target="{Binding ElementName=LestaPathInput}" Foreground="#F1F5FC" Padding="0" Content="Lesta Game Center"/>
-                        <Grid Margin="0,7,0,18" IsEnabled="{Binding DataContext.CanChangeLauncherPaths, RelativeSource={RelativeSource AncestorType=Window}}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBox x:Name="LestaPathInput" Text="{Binding LestaPath, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Путь Lesta Game Center" Margin="0,0,12,0"/>
-                            <Button Grid.Column="1" Content="Выбрать .exe" Tag="Lesta" Click="ChooseExecutable_Click" Style="{StaticResource SecondaryButton}" VerticalAlignment="Top" IsEnabled="{Binding CanSelectFiles}" AutomationProperties.Name="Выбрать файл Lesta"/>
-                        </Grid>
-                        <Label Target="{Binding ElementName=BattleNetPathInput}" Foreground="#F1F5FC" Padding="0" Content="Battle.net" Margin="0,14,0,0"/>
-                        <Grid Margin="0,7,0,18" IsEnabled="{Binding DataContext.CanChangeLauncherPaths, RelativeSource={RelativeSource AncestorType=Window}}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBox x:Name="BattleNetPathInput" Text="{Binding BattleNetPath, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Путь Battle.net" Margin="0,0,12,0"/>
-                            <Button Grid.Column="1" Content="Выбрать .exe" Tag="BattleNet" Click="ChooseExecutable_Click" Style="{StaticResource SecondaryButton}" VerticalAlignment="Top" IsEnabled="{Binding CanSelectFiles}" AutomationProperties.Name="Выбрать файл BattleNet"/>
-                        </Grid>
-                        <Label Target="{Binding ElementName=EaPathInput}" Foreground="#F1F5FC" Padding="0" Content="EA app" Margin="0,14,0,0"/>
-                        <Grid Margin="0,7,0,18" IsEnabled="{Binding DataContext.CanChangeLauncherPaths, RelativeSource={RelativeSource AncestorType=Window}}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBox x:Name="EaPathInput" Text="{Binding EaPath, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Путь EA app" Margin="0,0,12,0"/>
-                            <Button Grid.Column="1" Content="Выбрать .exe" Tag="Ea" Click="ChooseExecutable_Click" Style="{StaticResource SecondaryButton}" VerticalAlignment="Top" IsEnabled="{Binding CanSelectFiles}" AutomationProperties.Name="Выбрать файл Ea"/>
-                        </Grid>
-                        <Label Target="{Binding ElementName=RiotPathInput}" Foreground="#F1F5FC" Padding="0" Content="Riot Client" Margin="0,14,0,0"/>
-                        <Grid Margin="0,7,0,18" IsEnabled="{Binding DataContext.CanChangeLauncherPaths, RelativeSource={RelativeSource AncestorType=Window}}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBox x:Name="RiotPathInput" Text="{Binding RiotPath, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Путь Riot Client" Margin="0,0,12,0"/>
-                            <Button Grid.Column="1" Content="Выбрать .exe" Tag="Riot" Click="ChooseExecutable_Click" Style="{StaticResource SecondaryButton}" VerticalAlignment="Top" IsEnabled="{Binding CanSelectFiles}" AutomationProperties.Name="Выбрать файл Riot"/>
-                        </Grid>
-                        <Label Target="{Binding ElementName=VkPlayPathInput}" Foreground="#F1F5FC" Padding="0" Content="VK Play" Margin="0,14,0,0"/>
-                        <Grid Margin="0,7,0,18" IsEnabled="{Binding DataContext.CanChangeLauncherPaths, RelativeSource={RelativeSource AncestorType=Window}}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBox x:Name="VkPlayPathInput" Text="{Binding VkPlayPath, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Путь VK Play" Margin="0,0,12,0"/>
-                            <Button Grid.Column="1" Content="Выбрать .exe" Tag="VkPlay" Click="ChooseExecutable_Click" Style="{StaticResource SecondaryButton}" VerticalAlignment="Top" IsEnabled="{Binding CanSelectFiles}" AutomationProperties.Name="Выбрать файл VkPlay"/>
-                        </Grid>
-                        <Label Target="{Binding ElementName=WargamingPathInput}" Foreground="#F1F5FC" Padding="0" Content="Wargaming Game Center" Margin="0,14,0,0"/>
-                        <Grid Margin="0,7,0,18" IsEnabled="{Binding DataContext.CanChangeLauncherPaths, RelativeSource={RelativeSource AncestorType=Window}}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBox x:Name="WargamingPathInput" Text="{Binding WargamingPath, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Путь Wargaming Game Center" Margin="0,0,12,0"/>
-                            <Button Grid.Column="1" Content="Выбрать .exe" Tag="Wargaming" Click="ChooseExecutable_Click" Style="{StaticResource SecondaryButton}" VerticalAlignment="Top" IsEnabled="{Binding CanSelectFiles}" AutomationProperties.Name="Выбрать файл Wargaming"/>
-                        </Grid>
-                    </StackPanel></Border>
-                    <Border Style="{StaticResource Card}"><StackPanel>
-                        <TextBlock Text="Обновления самой программы" FontSize="21" FontWeight="SemiBold"/>
-                        <TextBlock Text="Все компьютеры должны использовать один источник новых версий." Style="{StaticResource Caption}" Margin="0,8,0,16"/>
-                        <TextBlock Text="HTTPS-адрес, репозиторий GitHub или общая папка"/><TextBox Text="{Binding AppUpdateSource, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Источник обновлений TechArrow"/>
-                        <CheckBox Content="Автоматически проверять и скачивать новые версии" IsChecked="{Binding AutomaticAppUpdates}" Foreground="{StaticResource TextBrush}" Margin="0,0,0,14"/>
-                        <CheckBox Content="Автоматически устанавливать в трее после окончания обслуживания" IsChecked="{Binding AutoInstallAppUpdates}" Foreground="{StaticResource TextBrush}" Margin="0,0,0,14"/>
-                        <TextBlock Text="Пустое поле использует адрес, заданный в установщике. Настройки компьютера сохраняются. Применение обновления требует перезапуска программы." Style="{StaticResource Caption}"/>
+                        <TextBlock Text="Мои лаунчеры" FontSize="21" FontWeight="SemiBold"/>
+                        <TextBlock Text="Добавьте .exe клиента. Тип определяется автоматически, путь сохраняется сразу." Style="{StaticResource Caption}" Margin="0,8,0,16"/>
+                        <Button Content="Добавить лаунчер" Tag="Auto" Click="ChooseExecutable_Click" HorizontalAlignment="Left" Margin="0,0,0,16" IsEnabled="{Binding DataContext.CanChangeLauncherPaths, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                        <ItemsControl ItemsSource="{Binding DataContext.AddedLaunchers, RelativeSource={RelativeSource AncestorType=Window}}"><ItemsControl.ItemTemplate><DataTemplate>
+                            <Border BorderBrush="#293649" BorderThickness="0,1,0,0" Padding="0,16,0,0" Margin="0,0,0,16"><StackPanel>
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="44"/><ColumnDefinition/></Grid.ColumnDefinitions><Image Source="{Binding Icon}" Width="32" Height="32"/><TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"/></Grid>
+                                <TextBlock Text="{Binding ExecutablePath}" Style="{StaticResource Caption}" FontSize="12" Margin="0,8,0,12"/>
+                                <WrapPanel IsEnabled="{Binding DataContext.CanChangeLauncherPaths, RelativeSource={RelativeSource AncestorType=Window}}"><Button Content="Изменить .exe" Tag="{Binding Key}" Click="ChooseExecutable_Click" Style="{StaticResource SecondaryButton}" Margin="0,0,12,8"/><Button Content="Удалить из списка" Tag="{Binding Key}" Click="RemoveLauncher_Click" Style="{StaticResource SecondaryButton}" Margin="0,0,0,8"/></WrapPanel>
+                            </StackPanel></Border>
+                        </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
                     </StackPanel></Border>
                     <Border Style="{StaticResource Card}"><StackPanel>
                         <TextBlock Text="Работа в фоне" FontSize="21" FontWeight="SemiBold"/>
@@ -138,7 +85,7 @@
                             <CheckBox Content="Вс" IsChecked="{Binding Sunday}" Foreground="{StaticResource TextBrush}" Margin="0,0,18,8"/>
                         </WrapPanel>
                         <TextBlock Text="Время запуска · ЧЧ:ММ"/><TextBox Text="{Binding ScheduleTime, UpdateSourceTrigger=PropertyChanged}" Width="140" HorizontalAlignment="Left" MaxLength="5" AutomationProperties.Name="Время запуска расписания"/>
-                        <CheckBox Content="Закрывать Steam после подтверждённого завершения обновлений" IsChecked="{Binding ScheduleAutoClose}" Foreground="{StaticResource TextBrush}" Margin="0,0,0,16"/>
+                        
                         <TextBlock Text="Нажмите «Сохранить настройки», чтобы применить расписание. Оно запускает выбранные клиенты для их автообновлений, подготавливает отложенные обновления Steam и включает его мониторинг. Режим подготовленных игр меняется на немедленное обновление; оригинальные манифесты сохраняются локально." Style="{StaticResource Caption}"/>
                     </StackPanel></Border>
                     <Border Style="{StaticResource Card}"><StackPanel>
@@ -154,7 +101,7 @@
                             <StackPanel><TextBlock Text="Пауза перед закрытием · секунды"/><TextBox Text="{Binding Grace, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Grace Period в секундах"/></StackPanel>
                             <StackPanel Margin="0,0,20,0"><TextBlock Text="Простой остальных клиентов · секунды (60–86400)"/><TextBox Text="{Binding OtherIdle, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Простой остальных лаунчеров в секундах"/></StackPanel>
                         </UniformGrid>
-                        <CheckBox Content="Автоматически закрывать остальные лаунчеры после простоя" IsChecked="{Binding AutoCloseOtherLaunchers}" Foreground="{StaticResource TextBrush}" Margin="0,12,0,12"/>
+                        <CheckBox Content="Автоматически закрывать лаунчеры после обслуживания" IsChecked="{Binding AutoCloseOtherLaunchers}" Foreground="{StaticResource TextBrush}" Margin="0,12,0,12"/>
                         <TextBlock Text="Скорости измеряются отдельно для процессов клиента и его помощников. Закрытие разрешается, когда сеть и диск ниже порогов в течение заданного времени и паузы. CPU и другие операции ввода-вывода также могут отложить закрытие. Windows запросит права администратора для отдельного сборщика; при отказе клиент останется открытым. Изменения порогов нужно сохранить." Style="{StaticResource Caption}"/>
                     </StackPanel></Border>
                     <WrapPanel Margin="0,6,0,12"><Button Content="Сохранить настройки" Command="{Binding SaveCommand}" Margin="0,0,12,8"/><Button Content="Перечитать файл" Command="{Binding ReloadCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,0,8"/></WrapPanel>
@@ -204,7 +151,7 @@
                 <Border Style="{StaticResource Card}"><StackPanel>
                     <TextBlock Text="Что изменилось" FontSize="21" FontWeight="SemiBold"/>
                     <TextBlock Text="{Binding Updates.CurrentVersion, StringFormat=Версия {0}}" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,18,0,8"/>
-                    <TextBlock Text="• Если измерения недоступны, Steam остаётся открытым, а завершённое обслуживание корректно заканчивается." Style="{StaticResource Caption}"/><TextBlock Text="Версия 0.2.8" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,22,0,8"/><TextBlock Text="• Добавлены отдельные измерения сети и диска процессов лаунчеров.&#10;• Автозакрытие учитывает оба порога, время простоя и паузу.&#10;• При отсутствии данных или отказе в доступе Windows клиент остаётся открытым.&#10;• Steam дополнительно подтверждает завершение по манифестам." Style="{StaticResource Caption}"/>
+                    <TextBlock Text="• Steam и остальные клиенты объединены в общий список.&#10;• Добавление через выбор .exe с определением лаунчера; замена файла и удаление из списка.&#10;• Обслуживаются только добавленные клиенты.&#10;• Кнопки обновления программы находятся в «О приложении». Автообновление сохранено." Style="{StaticResource Caption}"/><TextBlock Text="Версия 0.2.9" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,22,0,8"/><TextBlock Text="• Если измерения недоступны, Steam остаётся открытым, а завершённое обслуживание корректно заканчивается." Style="{StaticResource Caption}"/><TextBlock Text="Версия 0.2.8" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,22,0,8"/><TextBlock Text="• Добавлены отдельные измерения сети и диска процессов лаунчеров.&#10;• Автозакрытие учитывает оба порога, время простоя и паузу.&#10;• При отсутствии данных или отказе в доступе Windows клиент остаётся открытым.&#10;• Steam дополнительно подтверждает завершение по манифестам." Style="{StaticResource Caption}"/>
                     <TextBlock Text="Версия 0.2.7" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,22,0,8"/><TextBlock Text="• Распознавание выбранного .exe, проверка пути и иконки лаунчеров с локальным кэшем." Style="{StaticResource Caption}"/>
                     <TextBlock Text="Версия 0.2.6" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,22,0,8"/>
                     <TextBlock Text="• Адаптивное меню, перенос текста и параметров, тёмная прокрутка и поддержка масштаба Windows." Style="{StaticResource Caption}"/>

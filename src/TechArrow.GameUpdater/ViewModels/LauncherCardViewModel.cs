@@ -6,6 +6,10 @@ public sealed class LauncherCardViewModel(string name, string plannedStage) : Ob
     private string _status = "Не добавлен", _detail = "Выберите .exe клиента в настройках. Общая кнопка запускает автообновления и мониторинг активности; затем можно корректно закрыть клиент.";
     private IReadOnlyList<GameInfo> _games = [];
     public string Name { get; } = name;
+    public string Key { get; set; } = "";
+    public bool IsSteam => Key == "Steam";
+    private string _executablePath = "";
+    public string ExecutablePath { get => _executablePath; set => Set(ref _executablePath, value); }
     public string PlannedStage { get; } = plannedStage;
     public string Authorization => "Вход выполняется в самом лаунчере";
     private System.Windows.Media.ImageSource? _icon;

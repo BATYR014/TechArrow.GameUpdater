@@ -77,3 +77,5 @@ saved. Live localhost network and write-through disk checks passed on Windows.
 
 Version 0.2.9 finishes a manifest-confirmed Steam run while leaving the client
 open when the activity collector is unavailable. Includes all 0.2.8 measurements.
+
+Version 0.3.0 unifies launcher cards and replaces fixed paths with an executable picker, automatic identification, and editable saved launcher entries. Only added clients are maintained. Update controls remain in About; automatic application updates are retained.
