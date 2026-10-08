@@ -60,3 +60,9 @@ Version 0.2.6 adds responsive navigation and content layout. Compact windows use
 top navigation and a single column for monitoring settings. Initial window size
 respects the Windows work area; text, client badges and dark scrollbars remain
 readable at smaller sizes. Layout renders checked at 680x500, 960x600 and 1440x900.
+
+Version 0.2.7 recognizes supported executable names and vendor metadata when
+selecting launcher files, routes them to the matching settings field, and checks
+configured paths immediately. Cards use verified official website/CDN icons with
+a local cache and executable icon fallback. Login remains managed by each client.
+Shared GameCenter/wgc names use the selected vendor when metadata is ambiguous.

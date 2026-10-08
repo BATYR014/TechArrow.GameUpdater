@@ -19,6 +19,11 @@ internal static class LauncherChecks
                 var profile=LauncherProcessProfile.For(index);
                 var executable=Path.Combine(directory,profile.Frontends[0]);
                 if (!File.Exists(executable)) File.Copy(Path.Combine(directory,"EpicGamesLauncher.exe"),executable);
+                Check(LauncherIdentification.Identify(executable, LauncherIdentification.Keys[index]) == LauncherIdentification.Keys[index], "selected executable identifies launcher " + index);
+                if (index == 1) Check(LauncherIdentification.Identify(executable, "Steam") == "Epic", "wrong picker row routes Epic to its actual launcher");
+                var unsupported = Path.Combine(directory, "unrelated-game.exe");
+                File.Copy(executable, unsupported);
+                Check(LauncherIdentification.Identify(unsupported, LauncherIdentification.Keys[index]) is null, "unrelated game is not accepted as launcher");
                 using var process=Process.Start(new ProcessStartInfo(executable){ArgumentList={directory},UseShellExecute=false,CreateNoWindow=true,WindowStyle=ProcessWindowStyle.Hidden}) ?? throw new Exception("Test fixture failed to start.");
                 try
                 {

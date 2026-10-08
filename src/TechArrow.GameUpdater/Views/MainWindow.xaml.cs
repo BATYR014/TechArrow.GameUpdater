@@ -49,7 +49,7 @@ public partial class MainWindow : Window
             var dialog = new OpenFileDialog
             {
                 Title = "Выберите файл клиента: " + launcher,
-                Filter = launcher == "Steam" ? "Клиент Steam (steam.exe)|steam.exe" : "Приложения (*.exe)|*.exe",
+                Filter = "Приложения (*.exe)|*.exe",
                 CheckFileExists = true, CheckPathExists = true, Multiselect = false,
                 DefaultExt = ".exe", RestoreDirectory = true
             };
@@ -59,7 +59,7 @@ public partial class MainWindow : Window
                 dialog.FileName = Path.GetFileName(currentPath);
             }
             if (dialog.ShowDialog(this) != true) return;
-            await viewModel.Settings.SelectExecutableAsync(launcher, dialog.FileName);
+            launcher = await viewModel.Settings.SelectExecutableAsync(launcher, dialog.FileName);
             if (launcher == "Steam") await viewModel.ScanSteamAsync();
         }
         catch (Exception ex)

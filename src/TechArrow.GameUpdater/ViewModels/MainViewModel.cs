@@ -460,6 +460,33 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void OnSettingsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(SettingsViewModel.CanSelectFiles) && !_disposed) RefreshSteamCommands();
+        var properties = new[] { "SteamPath", "EpicPath", "LestaPath", "BattleNetPath", "EaPath", "RiotPath", "VkPlayPath", "WargamingPath" };
+        var index = Array.IndexOf(properties, e.PropertyName);
+        if (index >= 0 && !_disposed) RefreshLauncherCard(index);
+    }
+    private string LauncherPath(int index) => index switch
+    {
+        0 => Settings.SteamPath, 1 => Settings.EpicPath, 2 => Settings.LestaPath, 3 => Settings.BattleNetPath,
+        4 => Settings.EaPath, 5 => Settings.RiotPath, 6 => Settings.VkPlayPath, 7 => Settings.WargamingPath, _ => ""
+    };
+    private async void RefreshLauncherCard(int index)
+    {
+        var path = LauncherPath(index); var card = Launchers[index];
+        card.Icon = null;
+        if (string.IsNullOrWhiteSpace(path)) { card.Status = "Не добавлен"; card.Detail = "Выберите .exe лаунчера в настройках."; return; }
+        if (!System.IO.File.Exists(path)) { card.Status = "Файл не найден"; card.Detail = "Сохранённый файл отсутствует. Выберите актуальный .exe в настройках."; return; }
+        try
+        {
+            if (LauncherIdentification.Identify(path, LauncherIdentification.Keys[index]) != LauncherIdentification.Keys[index])
+            { card.Status = "Другой файл"; card.Detail = "Файл не соответствует этому лаунчеру. Выберите его .exe заново — программа определит нужный раздел."; return; }
+            card.Status = "Лаунчер добавлен";
+            card.Detail = "Файл найден и распознан. Готов к запуску через «Обновить всё». Авторизация и автообновления настраиваются в самом клиенте.";
+            card.Icon = LauncherIconService.FromExecutable(path);
+            var icon = await LauncherIconService.GetAsync(index, _lifetime.Token);
+            if (!_disposed && LauncherPath(index) == path && icon is not null) card.Icon = icon;
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { if (!_disposed && LauncherPath(index) == path) { card.Status = "Не удалось проверить"; card.Detail = ex.Message; } }
     }
     private async void OnTick(object? sender, EventArgs e)
     {
