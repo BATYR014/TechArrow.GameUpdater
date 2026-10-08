@@ -1,4 +1,5 @@
 using System.Windows.Threading;
+using TechArrow.GameUpdater.Services;
 using TechArrow.GameUpdater.Core.Models;
 using Microsoft.Extensions.Logging;
 using TechArrow.GameUpdater.Infrastructure.Services;
@@ -56,12 +57,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
     public AsyncCommand UpdateSteamCommand { get; }
     public AsyncCommand UpdateAllCommand { get; }
-    private string _allUpdateStatus = "Выберите .exe клиентов в настройках. Для остальных лаунчеров включите автообновления игр в самом клиенте.";
+    private string _allUpdateStatus = "Выберите .exe клиентов в настройках и включите в них автообновления игр. «Обновить всё» запускает мониторинг и автозакрытие после простоя.";
     public string AllUpdateStatus { get => _allUpdateStatus; private set => Set(ref _allUpdateStatus, value); }
-    private async Task StartOtherLaunchersAsync(AppSettings configuration, CancellationToken token)
+    private async Task<IReadOnlyList<LauncherStartRequest>> StartOtherLaunchersAsync(AppSettings configuration, CancellationToken token)
     {
         int requested = 0, missing = 0, failed = 0;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var monitored = new List<LauncherStartRequest>();
         foreach (var request in LauncherStartupService.Requests(configuration))
         {
             token.ThrowIfCancellationRequested();
@@ -73,7 +75,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 { card.Status = "Общий файл клиента"; card.Detail = "Этот .exe уже обработан для другого лаунчера. Проверьте выбранные пути."; continue; }
                 var result = await Task.Run(() => LauncherStartupService.Start(request, token), token);
                 card.Status = result.Status; card.Detail = result.Detail;
-                RecordDetail(request.Name + ": " + result.Status + ". Завершение загрузок не проверяется.");
+                RecordDetail(request.Name + ": " + result.Status + ". Клиент управляет очередью обновлений.");
+                if (executable is not null) monitored.Add(request);
                 if (executable is null) missing++; else requested++;
                 _logs.CreateLogger("Launchers").LogInformation("{Launcher}: {Status}", request.Name, result.Status);
             }
@@ -85,7 +88,86 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 _logs.CreateLogger("Launchers").LogError(ex, "Ошибка запуска {Launcher}", request.Name);
             }
         }
-        AllUpdateStatus = $"Клиентов обработано: {requested}. Без пути: {missing}. Ошибок: {failed}. Загрузки остальных лаунчеров управляются их настройками автообновления.";
+        AllUpdateStatus = $"Клиентов обработано: {requested}. Без пути: {missing}. Ошибок: {failed}. Активность выбранных клиентов будет проверяться параллельно.";
+        return monitored;
+    }
+    private async Task MonitorOtherLaunchersAsync(IReadOnlyList<LauncherStartRequest> requests, AppSettings configuration, CancellationToken token)
+    {
+        await Task.WhenAll(requests.Select(async request =>
+        {
+            var card = Launchers[request.CardIndex];
+            var logger = _logs.CreateLogger("LauncherMonitor");
+            var started = DateTimeOffset.UtcNow;
+            var lastState = "";
+            DateTimeOffset? unavailableSince = null;
+            bool observedRunning = false;
+            try
+            {
+                var reader = await Task.Run(() => new LauncherProcessReader(request, configuration with { SteamPath = configuration.SteamPath ?? _steamExecutable }), token);
+                var policy = new LauncherIdlePolicy(started, configuration.OtherLauncherIdleSeconds, configuration.GraceSeconds);
+                while (true)
+                {
+                    token.ThrowIfCancellationRequested();
+                    var reading = await Task.Run(reader.Read, token);
+                    token.ThrowIfCancellationRequested();
+                    observedRunning |= reading.Sample.IsRunning;
+                    if (!observedRunning && !reading.Sample.IsRunning)
+                    {
+                        if (reading.Sample.Timestamp - started >= TimeSpan.FromSeconds(120))
+                        { card.Status = "Клиент не обнаружен"; card.Detail = "Проверьте авторизацию, выбранный .exe и окно клиента."; RecordDetail(request.Name + ": " + card.Detail, true); logger.LogWarning("{Launcher}: {Detail}", request.Name, card.Detail); return; }
+                        card.Status = "Ожидание запуска"; card.Detail = "Ожидаем процессы основного клиента…";
+                        await Task.Delay(5000, token); continue;
+                    }
+                    if (!reading.Sample.Reliable)
+                    {
+                        unavailableSince ??= reading.Sample.Timestamp;
+                        if (reading.Sample.Timestamp - unavailableSince >= TimeSpan.FromMinutes(configuration.StuckTimeoutMinutes))
+                        { card.Status = "Мониторинг недоступен"; card.Detail = reading.Sample.Detail; RecordDetail(request.Name + ": " + card.Detail, true); logger.LogWarning("{Launcher}: {Detail}", request.Name, card.Detail); return; }
+                    }
+                    else unavailableSince = null;
+                    var decision = policy.Evaluate(reading.Sample);
+                    card.Status = decision.State; card.Detail = decision.Detail;
+                    if (lastState != decision.State)
+                    { RecordDetail(request.Name + ": " + decision.State + ". " + decision.Detail); logger.LogInformation("{Launcher}: {State}. {Detail}", request.Name, decision.State, decision.Detail); lastState = decision.State; }
+                    if (!reading.Sample.IsRunning && reading.Sample.Reliable) return;
+                    if (decision.ReadyToClose)
+                    {
+                        if (!configuration.AutoCloseOtherLaunchers || !Settings.AutoCloseOtherLaunchers)
+                        { card.Detail = "Клиент без существенной активности. Автозакрытие выключено; клиент оставлен открытым."; RecordDetail(request.Name + ": " + card.Detail); return; }
+                        var result = await LauncherExitService.RequestAsync(reader, policy, () => Settings.AutoCloseOtherLaunchers,
+                            configuration.GracefulExitTimeoutSeconds, token);
+                        token.ThrowIfCancellationRequested();
+                        if (result.Retry)
+                        { card.Status = "Закрытие отложено"; card.Detail = result.Detail; await Task.Delay(5000, token); continue; }
+                        if (result.Disabled) { card.Status = "Клиент оставлен открытым"; card.Detail = result.Detail; RecordDetail(request.Name + ": " + result.Detail); return; }
+                        card.Status = result.Exited ? "Клиент закрыт" : "Клиент не завершился"; card.Detail = result.Detail;
+                        RecordDetail(request.Name + ": " + result.Detail, !result.Exited);
+                        if (!result.Exited) logger.LogWarning("{Launcher}: {Detail}", request.Name, result.Detail);
+                        else logger.LogInformation("{Launcher}: {Detail}", request.Name, result.Detail);
+                        return;
+                    }
+                    await Task.Delay(5000, token);
+                }
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            { _runCancelled = true; card.Status = "Мониторинг остановлен"; card.Detail = "Новые запросы выхода не отправляются."; }
+            catch (Exception ex)
+            { card.Status = "Ошибка мониторинга"; card.Detail = ex.Message; RecordDetail(request.Name + ": " + ex.Message, true); logger.LogError(ex, "Ошибка мониторинга {Launcher}", request.Name); }
+        }));
+    }
+    private async Task MaintainSteamIfPresentAsync(AppSettings configuration, CancellationToken token)
+    {
+        try
+        {
+            await ScanSteamPathAsync(configuration.SteamPath);
+            token.ThrowIfCancellationRequested();
+            if (_steamExecutable is null)
+            { SteamWarnings = "Steam не найден. Мониторинг остальных выбранных клиентов продолжается."; RecordDetail(SteamWarnings); return; }
+            await PrepareAndStartSteamAsync(configuration, token);
+            await MonitorSteamAsync(configuration, token);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch (Exception ex) { SteamError(ex); }
     }
     private async Task UpdateAllAsync()
     {
@@ -96,12 +178,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         try
         {
             AllUpdateStatus = "Запуск выбранных клиентов…";
-            await StartOtherLaunchersAsync(Settings.SavedSettings, cancellation.Token);
-            var steam = await _steam.ScanAsync(Settings.SavedSettings.SteamPath);
-            if (steam.ExecutablePath is null)
-            { SteamWarnings = "Steam не найден. Остальные выбранные клиенты обработаны."; RecordDetail(SteamWarnings); return; }
-            await PrepareAndStartSteamAsync(Settings.SavedSettings, cancellation.Token);
-            await MonitorSteamAsync(Settings.SavedSettings, cancellation.Token);
+            var configuration = Settings.SavedSettings with { AutoCloseOtherLaunchers = Settings.AutoCloseOtherLaunchers };
+            var clients = await StartOtherLaunchersAsync(configuration, cancellation.Token);
+            await Task.WhenAll(MaintainSteamIfPresentAsync(configuration, cancellation.Token), MonitorOtherLaunchersAsync(clients, configuration, cancellation.Token));
+            cancellation.Token.ThrowIfCancellationRequested();
+            AllUpdateStatus = "Обслуживание завершено. Результаты закрытия — в карточках клиентов и истории запусков.";
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         { _runCancelled = true; AllUpdateStatus = "Обслуживание остановлено. Уже открытые клиенты продолжают работать."; }
@@ -188,7 +269,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             scheduleToken.ThrowIfCancellationRequested();
             if (occupied)
             {
-                ScheduleStatus = "Запуск пропущен: Steam уже обслуживается.";
+                ScheduleStatus = "Запуск пропущен: обслуживание клиентов уже выполняется.";
                 try
                 {
                     if (_history is not null)
@@ -202,30 +283,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 logger.LogInformation("{Status}", ScheduleStatus); return;
             }
             BeginRun("По расписанию"); recorded = true;
-            ScheduleStatus = "Запуск Steam по расписанию…";
-            await StartOtherLaunchersAsync(configuration, scheduleToken);
-            await ScanSteamPathAsync(configuration.SteamPath);
-            scheduleToken.ThrowIfCancellationRequested();
-            if (_steamExecutable is null)
-            { ScheduleStatus = "Остальные выбранные клиенты обработаны. Steam не найден; выберите steam.exe в настройках."; return; }
-            await PrepareAndStartSteamAsync(configuration, scheduleToken);
-            var startup = System.Diagnostics.Stopwatch.StartNew();
-            bool clientStarted = false;
-            while (startup.Elapsed < TimeSpan.FromSeconds(60))
-            {
-                scheduleToken.ThrowIfCancellationRequested();
-                var check = await _steam.ScanAsync(_steamExecutable);
-                if (check.IsRunning) { clientStarted = true; break; }
-                await Task.Delay(1000, scheduleToken);
-            }
-            scheduleToken.ThrowIfCancellationRequested();
-            if (!clientStarted) throw new TimeoutException("Steam не запустился за 60 секунд.");
-            if (_monitoring) { ScheduleStatus = "Мониторинг уже запущен."; return; }
+            ScheduleStatus = "Запуск клиентов по расписанию…";
+            var clients = await StartOtherLaunchersAsync(configuration, scheduleToken);
             AutoCloseSteam = configuration.ScheduleAutoCloseSteam;
-            ScheduleStatus = "Steam открыт по расписанию. Мониторинг запущен.";
+            ScheduleStatus = "Мониторинг выбранных клиентов запущен по расписанию.";
             logger.LogInformation("{Status}", ScheduleStatus);
-            await MonitorSteamAsync(configuration, scheduleToken);
-            ScheduleStatus = "Сессия по расписанию завершена: " + MonitorStatus;
+            await Task.WhenAll(MaintainSteamIfPresentAsync(configuration, scheduleToken), MonitorOtherLaunchersAsync(clients, configuration, scheduleToken));
+            scheduleToken.ThrowIfCancellationRequested();
+            ScheduleStatus = "Сессия по расписанию завершена. Результаты — в карточках клиентов и истории запусков.";
         }
         catch (OperationCanceledException) when (scheduleToken.IsCancellationRequested) { _runCancelled = true; if (!_disposed) ScheduleStatus = "Запуск по расписанию остановлен."; }
         catch (Exception ex)
@@ -389,7 +454,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public SettingsViewModel Settings { get; }
     public AppUpdatesViewModel? Updates { get; set; }
     public ClubViewModel? Club { get; set; }
-    public IReadOnlyList<LauncherCardViewModel> Launchers { get; } = [new("Steam", "Подготовка очереди и мониторинг"), new("Epic Games", "Автообновления клиента"), new("Lesta Game Center", "Автообновления клиента"), new("Battle.net", "Автообновления клиента"), new("EA app", "Автообновления клиента"), new("Riot Client", "Автообновления клиента"), new("VK Play", "Автообновления клиента"), new("Wargaming Game Center", "Автообновления клиента")];
+    public IReadOnlyList<LauncherCardViewModel> Launchers { get; } = [new("Steam", "Подготовка очереди и мониторинг"), new("Epic Games", "Мониторинг и автозакрытие"), new("Lesta Game Center", "Мониторинг и автозакрытие"), new("Battle.net", "Мониторинг и автозакрытие"), new("EA app", "Мониторинг и автозакрытие"), new("Riot Client", "Мониторинг и автозакрытие"), new("VK Play", "Мониторинг и автозакрытие"), new("Wargaming Game Center", "Мониторинг и автозакрытие")];
     public string LogText { get => _logText; private set => Set(ref _logText, value); }
     public string LogError { get => _logError; private set => Set(ref _logError, value); }
     private void OnSettingsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

@@ -41,7 +41,7 @@ public static class LauncherStartupService
             if (process is null) throw new InvalidOperationException("Не удалось передать запрос запуска клиента.");
         }
         else launch(executable);
-        return new("Запрос запуска отправлен", "Клиент управляет загрузками. Включите в нём автообновления игр и проверьте авторизацию. Завершение обновлений пока не отслеживается.");
+        return new("Запрос запуска отправлен", "Клиент управляет загрузками. Включите в нём автообновления игр и проверьте авторизацию. Далее проверяется активность процессов для автозакрытия.");
     }
 
     private static bool IsRunning(string executable)

@@ -13,7 +13,7 @@
                     <Border Style="{StaticResource Card}" Background="#1B3038" BorderBrush="#365762" Padding="20,16">
                         <StackPanel><TextBlock Text="Обслуживание Steam" FontWeight="SemiBold" Foreground="#ADFFED"/><TextBlock Text="Запустите загрузки в Steam и включите мониторинг. По завершении можно автоматически закрыть клиент." Style="{StaticResource Caption}" Margin="0,6,0,0"/></StackPanel>
                     </Border>
-                    <Grid Margin="0,4,0,18"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Игровые клиенты" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="8 клиентов · общий запуск и мониторинг Steam" Style="{StaticResource Caption}" FontSize="13" Margin="0,5,12,0"/></StackPanel><Button Grid.Column="1" Content="Обновить всё" Command="{Binding UpdateAllCommand}" VerticalAlignment="Center" ToolTip="Steam: подготовка очереди и мониторинг. Остальные выбранные клиенты: запуск для их собственных автообновлений."/></Grid>
+                    <Grid Margin="0,4,0,18"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Игровые клиенты" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="8 клиентов · мониторинг и автозакрытие" Style="{StaticResource Caption}" FontSize="13" Margin="0,5,12,0"/></StackPanel><Button Grid.Column="1" Content="Обновить всё" Command="{Binding UpdateAllCommand}" VerticalAlignment="Center" ToolTip="Steam: подготовка очереди и мониторинг. Остальные клиенты: автообновления, мониторинг процессов и закрытие после простоя."/></Grid>
                     <Border Style="{StaticResource Card}"><StackPanel>
                         <TextBlock Text="{Binding AllUpdateStatus}" TextWrapping="Wrap" Style="{StaticResource Caption}" Margin="0,0,0,14"/><TextBlock Text="Steam · библиотеки и обновления" FontSize="20" FontWeight="SemiBold"/>
                         <TextBlock Text="{Binding SteamSummary}" Margin="0,10,0,8"/>
@@ -29,6 +29,12 @@
                         <WrapPanel><Button Content="Запустить обновления Steam" Command="{Binding UpdateSteamCommand}" Margin="0,0,12,8"/><Button Content="Начать мониторинг" Command="{Binding MonitorSteamCommand}" Margin="0,0,12,8"/><Button Content="Остановить" Command="{Binding StopMonitorCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,0,8"/></WrapPanel>
                         <TextBlock Text="«Запустить обновления Steam» подготавливает отложенные обновления во всех библиотеках и включает мониторинг. Для подготовки Steam перезапускается, если нет активных игр или загрузок. Мониторинг проверяет файлы каждые 3 секунды. Процент относится к скачиванию; установка проверяется отдельно. Простои, паузы и неизвестные данные не подтверждают завершение." Style="{StaticResource Caption}" FontSize="12"/>
 
+                    </StackPanel></Border>
+                    <Border Style="{StaticResource Card}"><StackPanel>
+                        <TextBlock Text="Автозакрытие остальных лаунчеров" FontSize="20" FontWeight="SemiBold"/>
+                        <CheckBox Content="Закрывать Epic, Lesta, Battle.net, EA, Riot, VK Play и Wargaming после простоя" IsChecked="{Binding Settings.AutoCloseOtherLaunchers}" Foreground="{StaticResource TextBrush}" Margin="0,14,0,12"/>
+                        <TextBlock Text="Работает при «Обновить всё» и по расписанию. По умолчанию: 5 минут без существенной активности + пауза перед закрытием. Новая активность сбрасывает отсчёт. Если обнаружена игра, ввод пользователя или другое активное окно, закрытие откладывается. У этих клиентов простой не подтверждает завершение всей очереди: при паузе или потере сети клиент тоже может перестать передавать данные." Style="{StaticResource Caption}" FontSize="12"/>
+                        <TextBlock Text="Выход запрашивается через трей или закрытие окна. Если клиент остаётся в фоне, карточка и журнал покажут это. Игровые процессы и фоновые службы принудительно не завершаются. Чтобы сохранить выбранный режим для следующих запусков, нажмите «Сохранить настройки»." Style="{StaticResource Caption}" FontSize="12" Margin="0,8,0,0"/>
                     </StackPanel></Border>
                     <ItemsControl ItemsSource="{Binding Launchers}">
                         <ItemsControl.ItemTemplate><DataTemplate>
@@ -142,7 +148,9 @@
                             <StackPanel><TextBlock Text="Порог записи · МБ/с (резерв)"/><TextBox Text="{Binding Disk, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Порог записи на диск в МБ/с"/></StackPanel>
                             <StackPanel Margin="0,0,20,0"><TextBlock Text="Время простоя · секунды"/><TextBox Text="{Binding Idle, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Время простоя в секундах"/></StackPanel>
                             <StackPanel><TextBlock Text="Пауза перед закрытием · секунды"/><TextBox Text="{Binding Grace, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Grace Period в секундах"/></StackPanel>
+                            <StackPanel Margin="0,0,20,0"><TextBlock Text="Простой остальных клиентов · секунды (60–86400)"/><TextBox Text="{Binding OtherIdle, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Простой остальных лаунчеров в секундах"/></StackPanel>
                         </UniformGrid>
+                        <CheckBox Content="Автоматически закрывать остальные лаунчеры после простоя" IsChecked="{Binding AutoCloseOtherLaunchers}" Foreground="{StaticResource TextBrush}" Margin="0,12,0,12"/>
                         <TextBlock Text="Мониторинг использует манифесты, журнал и изменения файлов. Пороги сети и диска пока только сохраняются. Автозакрытие включается в обзоре для текущей сессии." Style="{StaticResource Caption}"/>
                     </StackPanel></Border>
                     <WrapPanel Margin="0,6,0,12"><Button Content="Сохранить настройки" Command="{Binding SaveCommand}" Margin="0,0,12,8"/><Button Content="Перечитать файл" Command="{Binding ReloadCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,0,8"/></WrapPanel>

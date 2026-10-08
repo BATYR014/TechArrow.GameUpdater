@@ -44,3 +44,11 @@ from launcher startup requests, failures, stops and interrupted sessions.
 The separate TechArrow-ClubServer archive contains the web dashboard and API.
 Deploy it on an HTTPS server before connecting remote clubs; GitHub Releases
 does not host that API. See CLUB-SERVER.md for deployment and data scope.
+
+Version 0.2.4 adds process activity monitoring and optional graceful exit for
+Epic Games, Lesta, Battle.net, EA, Riot, VK Play and Wargaming after Update All
+or scheduled maintenance. It waits through startup, sustained inactivity and a
+grace period; user activity, detected games and uncertain process readings
+prevent closure. Inactivity is a heuristic, not proof that a vendor download
+queue completed. No game or background service is forcibly terminated.
+See LAUNCHER-AUTO-CLOSE.md for settings, limitations and validation.

@@ -23,6 +23,10 @@ public sealed class SettingsViewModel : ObservableObject
     private string _steamPath = "", _epicPath = "", _lestaPath = "";
     private string _battleNetPath = "", _eaPath = "", _riotPath = "", _vkPlayPath = "", _wargamingPath = "";
     private string _network = "100", _disk = "1", _idle = "60", _grace = "90";
+    private bool _autoCloseOtherLaunchers = true;
+    private string _otherIdle = "300";
+    public bool AutoCloseOtherLaunchers { get => Volatile.Read(ref _autoCloseOtherLaunchers); set => Set(ref _autoCloseOtherLaunchers, value); }
+    public string OtherIdle { get => _otherIdle; set => Set(ref _otherIdle, value); }
     public SettingsViewModel(ISettingsService service, ILogger<SettingsViewModel> logger, WindowsStartupService startup)
     {
         _service = service; _logger = logger; _startup = startup;
@@ -39,6 +43,7 @@ public sealed class SettingsViewModel : ObservableObject
         Idle != _loaded.IdleSeconds.ToString() || Grace != _loaded.GraceSeconds.ToString() ||
         ScheduleEnabled != _loaded.ScheduleEnabled || ScheduleTime.Trim() != _loaded.ScheduleTime || SelectedDays() != _loaded.ScheduleDays ||
         ScheduleAutoClose != _loaded.ScheduleAutoCloseSteam || AutoStartWithWindows != _loaded.AutoStartWithWindows ||
+        AutoCloseOtherLaunchers != _loaded.AutoCloseOtherLaunchers || OtherIdle != _loaded.OtherLauncherIdleSeconds.ToString() ||
         AppUpdateSource.Trim() != _loaded.AppUpdateSource || AutomaticAppUpdates != _loaded.AutomaticAppUpdates || AutoInstallAppUpdates != _loaded.AutoInstallAppUpdates;
     public AppSettings SavedSettings => _loaded;
     public bool ScheduleEnabled { get => _scheduleEnabled; set => Set(ref _scheduleEnabled, value); }
@@ -79,6 +84,7 @@ public sealed class SettingsViewModel : ObservableObject
         {
             _loaded = await _service.LoadAsync(CancellationToken.None);
             AutoStartWithWindows = _startup.IsEnabled;
+            AutoCloseOtherLaunchers = _loaded.AutoCloseOtherLaunchers; OtherIdle = _loaded.OtherLauncherIdleSeconds.ToString();
             AppUpdateSource = _loaded.AppUpdateSource;
             AutomaticAppUpdates = _loaded.AutomaticAppUpdates;
             AutoInstallAppUpdates = _loaded.AutoInstallAppUpdates;
@@ -145,14 +151,15 @@ public sealed class SettingsViewModel : ObservableObject
     private async Task SaveAsync()
     {
         if (!double.TryParse(Network, out var network) || !double.TryParse(Disk, out var disk) ||
-            !int.TryParse(Idle, out var idle) || !int.TryParse(Grace, out var grace))
+            !int.TryParse(Idle, out var idle) || !int.TryParse(Grace, out var grace) || !int.TryParse(OtherIdle, out var otherIdle))
         { Message = "Введите корректные числовые значения."; return; }
         var settings = _loaded with { SteamPath = SteamPath.Trim(), EpicPath = EpicPath.Trim(), LestaPath = LestaPath.Trim(),
             BattleNetPath = BattleNetPath.Trim(), EaPath = EaPath.Trim(), RiotPath = RiotPath.Trim(), VkPlayPath = VkPlayPath.Trim(), WargamingPath = WargamingPath.Trim(),
             AppUpdateSource = AppUpdateSource.Trim(), AutomaticAppUpdates = AutomaticAppUpdates, AutoInstallAppUpdates = AutoInstallAppUpdates,
             AutoStartWithWindows = AutoStartWithWindows,
             ScheduleEnabled = ScheduleEnabled, ScheduleTime = ScheduleTime.Trim(), ScheduleDays = SelectedDays(), ScheduleAutoCloseSteam = ScheduleAutoClose,
-            NetworkThresholdKb = network, DiskThresholdMb = disk, IdleSeconds = idle, GraceSeconds = grace };
+            NetworkThresholdKb = network, DiskThresholdMb = disk, IdleSeconds = idle, GraceSeconds = grace,
+            AutoCloseOtherLaunchers = AutoCloseOtherLaunchers, OtherLauncherIdleSeconds = otherIdle };
         if (!string.IsNullOrWhiteSpace(settings.AppUpdateSource)) AppUpdateService.ValidateSource(settings.AppUpdateSource);
         settings.Validate();
         var previousCommand = _startup.GetCommand();

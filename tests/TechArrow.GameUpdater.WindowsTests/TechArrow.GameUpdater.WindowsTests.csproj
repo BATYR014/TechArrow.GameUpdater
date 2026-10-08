@@ -1,3 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework></PropertyGroup><ItemGroup><Compile Include="../../src/TechArrow.GameUpdater/Services/WindowsStartupService.cs" Link="WindowsStartupService.cs" /><Compile Include="../../src/TechArrow.GameUpdater/Services/AppUpdateService.cs" Link="AppUpdateService.cs" /><PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" /><PackageReference Include="Velopack" Version="1.2.0" /></ItemGroup><ItemGroup>
   <ProjectReference Include="..\..\src\TechArrow.GameUpdater.Infrastructure\TechArrow.GameUpdater.Infrastructure.csproj" />
-</ItemGroup><ItemGroup><Compile Include="../../src/TechArrow.GameUpdater/Services/ClubConnectionService.cs" Link="ClubConnectionService.cs" /></ItemGroup></Project>
+</ItemGroup><ItemGroup><Compile Include="../../src/TechArrow.GameUpdater/Services/ClubConnectionService.cs" Link="ClubConnectionService.cs" /></ItemGroup>
+<PropertyGroup><UseWPF>true</UseWPF></PropertyGroup>
+<ItemGroup>
+  <Compile Include="../../src/TechArrow.GameUpdater/Services/LauncherProcessReader.cs" Link="LauncherProcessReader.cs" />
+  <Compile Include="../../src/TechArrow.GameUpdater/Services/LauncherExitService.cs" Link="LauncherExitService.cs" />
+  <ProjectReference Include="../TechArrow.LauncherFixture/TechArrow.LauncherFixture.csproj" ReferenceOutputAssembly="false" />
+</ItemGroup>
+</Project>

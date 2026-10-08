@@ -9,6 +9,8 @@ public sealed record AppSettings
     public string ScheduleTime { get; init; } = "04:00";
     public int ScheduleDays { get; init; } = 62; // bit 0: Sunday, bit 1: Monday, ... bit 6: Saturday
     public bool ScheduleAutoCloseSteam { get; init; }
+    public bool AutoCloseOtherLaunchers { get; init; } = true;
+    public int OtherLauncherIdleSeconds { get; init; } = 300;
     public int SchemaVersion { get; init; } = 1;
     public string? SteamPath { get; init; }
     public string? EpicPath { get; init; }
@@ -38,7 +40,7 @@ public sealed record AppSettings
         if (SchemaVersion != 1) throw new InvalidDataException("Неподдерживаемая версия настроек.");
         if (!double.IsFinite(NetworkThresholdKb) || NetworkThresholdKb < 0 ||
             !double.IsFinite(DiskThresholdMb) || DiskThresholdMb < 0 ||
-            IdleSeconds <= 0 || GraceSeconds < 0 || GracefulExitTimeoutSeconds <= 0 ||
+            IdleSeconds <= 0 || OtherLauncherIdleSeconds < 60 || OtherLauncherIdleSeconds > 86400 || GraceSeconds < 0 || GracefulExitTimeoutSeconds <= 0 ||
             StuckTimeoutMinutes <= 0 || InternetRetryMinutes <= 0 || MinimumFreeSpaceGb < 0 || RestartAttempts < 0)
             throw new InvalidDataException("Некорректные пороги или интервалы в настройках.");
     }

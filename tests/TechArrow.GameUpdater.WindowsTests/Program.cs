@@ -1,6 +1,8 @@
+global using System.IO;
 using Microsoft.Win32;
 using TechArrow.GameUpdater.Services;
 Velopack.VelopackApp.Build().SetAutoApplyOnStartup(false).Run();
+await LauncherChecks.RunAsync();
 var testKey = @"Software\TechArrow\StartupTests\" + Guid.NewGuid().ToString("N");
 try
 {
