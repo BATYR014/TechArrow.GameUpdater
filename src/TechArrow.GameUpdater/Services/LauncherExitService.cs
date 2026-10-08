@@ -56,12 +56,12 @@ public static class LauncherExitService
     {
         token.ThrowIfCancellationRequested();
         if (!frontends.All(LauncherProcessReader.Matches)) return false;
-        try { if (ExitThroughTray(reader.Profile, frontends, enabled, token)) return true; }
+        try { if ((UserActivityClock.TryLastRealInput(out var input) && unchecked((uint)Environment.TickCount64 - input) >= 60000) && ExitThroughTray(reader.Profile, frontends, enabled, token)) return true; }
         catch (Exception ex) when (ex is ElementNotAvailableException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { }
         token.ThrowIfCancellationRequested();
         if (!enabled()) throw new OperationCanceledException();
         if (!policy.Evaluate(reader.Read().Sample).ReadyToClose) throw new LauncherExitDeferredException();
-        EnsureUserIdle();
+        if (reader.PauseWhenUserActive) EnsureUserIdle();
         return RequestWindowExit(frontends, token, enabled);
     }
     public static bool RequestWindowExit(IReadOnlyList<LauncherProcessIdentity> frontends, CancellationToken token, Func<bool>? enabled = null)

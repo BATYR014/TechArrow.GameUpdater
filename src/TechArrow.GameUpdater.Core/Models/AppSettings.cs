@@ -9,6 +9,7 @@ public sealed record AppSettings
     public string ScheduleTime { get; init; } = "04:00";
     public int ScheduleDays { get; init; } = 62; // bit 0: Sunday, bit 1: Monday, ... bit 6: Saturday
     public bool ScheduleAutoCloseSteam { get; init; }
+    public bool PauseAutoCloseWhileUserActive { get; init; }
     public bool AutoCloseOtherLaunchers { get; init; } = true;
     public int OtherLauncherIdleSeconds { get; init; } = 120;
     public int AutoCloseTimerVersion { get; init; } = 2;

@@ -14,6 +14,17 @@ public sealed record LauncherProcessProfile(string[] Frontends, string[] Helpers
         7 => new(["wgc.exe", "GameCenter.exe", "WargamingGameCenter.exe"], ["wgc_renderer.exe", "wgc_browser.exe", "wgc_agent.exe", "wgc_helper.exe", "QtWebEngineProcess.exe"], ["Wargaming Game Center", "Wargaming.net Game Center", "Wargaming"]),
         _ => throw new ArgumentOutOfRangeException(nameof(index))
     };
+    public static string InstallationDirectory(int index, string executable)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(executable))!;
+        if (index == 1 && new[] { "Win32", "Win64" }.Contains(Path.GetFileName(directory), StringComparer.OrdinalIgnoreCase))
+        {
+            var binaries = Path.GetDirectoryName(directory)!;
+            if (Path.GetFileName(binaries).Equals("Binaries", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(Path.GetFileName(Path.GetDirectoryName(binaries)), "Portal", StringComparison.OrdinalIgnoreCase)) return binaries;
+        }
+        return directory;
+    }
     public bool IsFrontend(string name) => Frontends.Contains(name, StringComparer.OrdinalIgnoreCase);
     public bool IsHelper(string name) => Helpers.Contains(name, StringComparer.OrdinalIgnoreCase);
     public static bool Within(string path, string directory) => Path.GetFullPath(path).StartsWith(

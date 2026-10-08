@@ -22,9 +22,11 @@ public sealed class SettingsViewModel : ObservableObject
     private string _message = "Загрузка настроек…";
     private string _steamPath = "", _epicPath = "", _lestaPath = "";
     private string _battleNetPath = "", _eaPath = "", _riotPath = "", _vkPlayPath = "", _wargamingPath = "";
-    private string _network = "100", _disk = "1", _idle = "60", _grace = "90";
+    private string _network = "100", _disk = "1", _idle = "120", _grace = "0";
+    private bool _pauseAutoCloseWhileUserActive;
+    public bool PauseAutoCloseWhileUserActive { get => _pauseAutoCloseWhileUserActive; set => Set(ref _pauseAutoCloseWhileUserActive, value); }
     private bool _autoCloseOtherLaunchers = true;
-    private string _otherIdle = "300";
+    private string _otherIdle = "120";
     public bool AutoCloseOtherLaunchers { get => Volatile.Read(ref _autoCloseOtherLaunchers); set => Set(ref _autoCloseOtherLaunchers, value); }
     public string OtherIdle { get => _otherIdle; set => Set(ref _otherIdle, value); }
     public SettingsViewModel(ISettingsService service, ILogger<SettingsViewModel> logger, WindowsStartupService startup)
@@ -43,7 +45,7 @@ public sealed class SettingsViewModel : ObservableObject
         Idle != _loaded.IdleSeconds.ToString() || Grace != _loaded.GraceSeconds.ToString() ||
         ScheduleEnabled != _loaded.ScheduleEnabled || ScheduleTime.Trim() != _loaded.ScheduleTime || SelectedDays() != _loaded.ScheduleDays ||
         ScheduleAutoClose != _loaded.ScheduleAutoCloseSteam || AutoStartWithWindows != _loaded.AutoStartWithWindows ||
-        AutoCloseOtherLaunchers != _loaded.AutoCloseOtherLaunchers || OtherIdle != _loaded.OtherLauncherIdleSeconds.ToString() ||
+        PauseAutoCloseWhileUserActive != _loaded.PauseAutoCloseWhileUserActive || AutoCloseOtherLaunchers != _loaded.AutoCloseOtherLaunchers || OtherIdle != _loaded.OtherLauncherIdleSeconds.ToString() ||
         AppUpdateSource.Trim() != _loaded.AppUpdateSource || AutomaticAppUpdates != _loaded.AutomaticAppUpdates || AutoInstallAppUpdates != _loaded.AutoInstallAppUpdates;
     public AppSettings SavedSettings => _loaded;
     public bool ScheduleEnabled { get => _scheduleEnabled; set => Set(ref _scheduleEnabled, value); }
@@ -84,6 +86,7 @@ public sealed class SettingsViewModel : ObservableObject
         {
             _loaded = await _service.LoadAsync(CancellationToken.None);
             AutoStartWithWindows = _startup.IsEnabled;
+            PauseAutoCloseWhileUserActive = _loaded.PauseAutoCloseWhileUserActive;
             AutoCloseOtherLaunchers = _loaded.AutoCloseOtherLaunchers; OtherIdle = _loaded.OtherLauncherIdleSeconds.ToString();
             AppUpdateSource = _loaded.AppUpdateSource;
             AutomaticAppUpdates = _loaded.AutomaticAppUpdates;
@@ -170,7 +173,7 @@ public sealed class SettingsViewModel : ObservableObject
             AutoStartWithWindows = AutoStartWithWindows,
             ScheduleEnabled = ScheduleEnabled, ScheduleTime = ScheduleTime.Trim(), ScheduleDays = SelectedDays(), ScheduleAutoCloseSteam = ScheduleAutoClose,
             NetworkThresholdKb = network, DiskThresholdMb = disk, IdleSeconds = idle, GraceSeconds = grace,
-            AutoCloseOtherLaunchers = AutoCloseOtherLaunchers, OtherLauncherIdleSeconds = otherIdle };
+            PauseAutoCloseWhileUserActive = PauseAutoCloseWhileUserActive, AutoCloseOtherLaunchers = AutoCloseOtherLaunchers, OtherLauncherIdleSeconds = otherIdle };
         if (!string.IsNullOrWhiteSpace(settings.AppUpdateSource)) AppUpdateService.ValidateSource(settings.AppUpdateSource);
         settings.Validate();
         var previousCommand = _startup.GetCommand();

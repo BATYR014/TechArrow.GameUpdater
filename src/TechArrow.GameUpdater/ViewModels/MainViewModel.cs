@@ -198,7 +198,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         try
         {
             AllUpdateStatus = "Запуск выбранных клиентов…";
-            var configuration = Settings.SavedSettings with { AutoCloseOtherLaunchers = Settings.AutoCloseOtherLaunchers };
+            var configuration = Settings.SavedSettings with { AutoCloseOtherLaunchers = Settings.AutoCloseOtherLaunchers, PauseAutoCloseWhileUserActive = Settings.PauseAutoCloseWhileUserActive };
             AutoCloseSteam = configuration.AutoCloseOtherLaunchers;
             var clients = await StartOtherLaunchersAsync(configuration, cancellation.Token);
             await Task.WhenAll(MaintainSteamIfPresentAsync(configuration, cancellation.Token), MonitorOtherLaunchersAsync(clients, configuration, cancellation.Token));
@@ -219,7 +219,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _scheduledCancellation = cancellation; RefreshSteamCommands();
         try
         {
-            var configuration = Settings.SavedSettings with { AutoCloseOtherLaunchers = Settings.AutoCloseOtherLaunchers };
+            var configuration = Settings.SavedSettings with { AutoCloseOtherLaunchers = Settings.AutoCloseOtherLaunchers, PauseAutoCloseWhileUserActive = Settings.PauseAutoCloseWhileUserActive };
             var index = Array.IndexOf(LauncherIdentification.Keys, key);
             if (index == 0) { AutoCloseSteam = configuration.AutoCloseOtherLaunchers; await MaintainSteamIfPresentAsync(configuration, cancellation.Token); }
             else { var clients = await StartOtherLaunchersAsync(configuration, cancellation.Token, index); await MonitorOtherLaunchersAsync(clients, configuration, cancellation.Token); }

@@ -14,7 +14,9 @@ internal static class LauncherChecks
             var fixture = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"../../../../TechArrow.LauncherFixture/bin",configuration,"net8.0-windows"));
             for (var index=1;index<=7;index++)
             {
-                var directory=Path.Combine(testRoot,index.ToString());Directory.CreateDirectory(directory);
+                var directory=Path.Combine(testRoot,index.ToString());
+                if (index == 1) directory=Path.Combine(directory,"Portal","Binaries","Win64");
+                Directory.CreateDirectory(directory);
                 foreach(var file in Directory.EnumerateFiles(fixture)) File.Copy(file,Path.Combine(directory,Path.GetFileName(file)));
                 var profile=LauncherProcessProfile.For(index);
                 var executable=Path.Combine(directory,profile.Frontends[0]);
@@ -31,7 +33,14 @@ internal static class LauncherChecks
                     while(!File.Exists(Path.Combine(directory,"ready")) && startup.Elapsed<TimeSpan.FromSeconds(15))
                     { if(process.HasExited) throw new Exception("Fixture exited during startup.");await Task.Delay(50); }
                     Check(File.Exists(Path.Combine(directory,"ready")),"fixture window ready");
-                    var reader=new LauncherProcessReader(new(index,"isolated test",executable));
+                    var selectedExecutable = executable;
+                    if (index == 1)
+                    {
+                        selectedExecutable=Path.Combine(Path.GetDirectoryName(directory)!,"Win32","EpicGamesLauncher.exe");
+                        Directory.CreateDirectory(Path.GetDirectoryName(selectedExecutable)!); File.Copy(executable, selectedExecutable);
+                    }
+                    var reader=new LauncherProcessReader(new(index,"isolated test",selectedExecutable));
+                    Check(!reader.PauseWhenUserActive, "user activity does not pause maintenance by default");
                     var initial=reader.Read();await Task.Delay(450);var active=reader.Read();
                     Check(active.Sample.IsRunning && active.Sample.Reliable && active.Sample.HasMeasurement && active.Sample.IoBytesPerSecond>1024,"native counters detect active client for profile "+index);
                     var identity=active.Processes.Single(p=>p.Id==process.Id);

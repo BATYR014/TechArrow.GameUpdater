@@ -15,6 +15,7 @@ public sealed record LauncherProcessReading(LauncherActivitySample Sample, IRead
 public interface ILauncherProcessReader
 {
     LauncherProcessProfile Profile { get; }
+    bool PauseWhenUserActive => true;
     LauncherProcessReading Read();
 }
 public sealed class LauncherProcessReader : ILauncherProcessReader
@@ -35,12 +36,13 @@ public sealed class LauncherProcessReader : ILauncherProcessReader
         _profile = LauncherProcessProfile.For(request.CardIndex); _cardIndex = request.CardIndex;
         if (!_profile.IsFrontend(Path.GetFileName(executable)))
             throw new InvalidDataException("Для мониторинга выберите основной .exe клиента: " + string.Join(", ", _profile.Frontends));
-        _directory = Path.GetDirectoryName(executable)!;
+        _directory = LauncherProcessProfile.InstallationDirectory(request.CardIndex, executable);
+        PauseWhenUserActive = configuration?.PauseAutoCloseWhileUserActive ?? false;
         if (configuration is not null)
         {
             foreach (var client in LauncherStartupService.Requests(configuration))
             {
-                try { var path = LauncherStartupService.ResolveExecutable(client); if (path is not null) _otherClients.Add((Path.GetDirectoryName(path)!, LauncherProcessProfile.For(client.CardIndex))); }
+                try { var path = LauncherStartupService.ResolveExecutable(client); if (path is not null) _otherClients.Add((LauncherProcessProfile.InstallationDirectory(client.CardIndex, path), LauncherProcessProfile.For(client.CardIndex))); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { }
             }
             if (!string.IsNullOrWhiteSpace(configuration.SteamPath) && File.Exists(configuration.SteamPath)) _steamExecutable = Path.GetFullPath(configuration.SteamPath);
@@ -48,6 +50,7 @@ public sealed class LauncherProcessReader : ILauncherProcessReader
         _gameDirectories = ReadGameDirectories(_directory);
     }
     public LauncherProcessProfile Profile => _profile;
+    public bool PauseWhenUserActive { get; }
     public LauncherProcessReading Read()
     {
         var now = DateTimeOffset.UtcNow;
@@ -114,8 +117,8 @@ public sealed class LauncherProcessReader : ILauncherProcessReader
     }
     private string? BusyReason(IReadOnlyList<ProcessRow> all, IReadOnlyList<LauncherProcessIdentity> group)
     {
-        if (!UserActivityClock.TryLastRealInput(out var lastInput)) return "Не удалось проверить активность пользователя.";
-        if (unchecked((uint)Environment.TickCount64 - lastInput) < 60000) return "Пользователь работает за компьютером. Ожидаем минуту без ввода.";
+        if (PauseWhenUserActive && !UserActivityClock.TryLastRealInput(out _)) return "Не удалось проверить активность пользователя.";
+        if (PauseWhenUserActive && UserActivityClock.TryLastRealInput(out var lastInput) && unchecked((uint)Environment.TickCount64 - lastInput) < 60000) return "Пользователь работает за компьютером. Ожидаем минуту без ввода.";
         var ids = group.Where(p => p.Frontend || all.Any(row => row.Id == p.Id && row.Session == _session)).Select(p => p.Id).ToHashSet();
         var descendants = new HashSet<int>(ids);
         bool added;
@@ -136,7 +139,7 @@ public sealed class LauncherProcessReader : ILauncherProcessReader
                 return "Запущена игра из установленной библиотеки.";
         }
         var foreground = GetForegroundWindow();
-        if (foreground != IntPtr.Zero)
+        if (PauseWhenUserActive && foreground != IntPtr.Zero)
         {
             GetWindowThreadProcessId(foreground, out var foregroundId);
             if (foregroundId != Environment.ProcessId && !ids.Contains((int)foregroundId))

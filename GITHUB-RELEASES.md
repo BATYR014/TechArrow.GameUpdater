@@ -83,3 +83,5 @@ Version 0.3.0 unifies launcher cards and replaces fixed paths with an executable
 Version 0.3.1 permits Steam maintenance to finish without observed downloads when readable installed manifests remain stable. Pending updates, games and network/disk activity still block exit. Launcher cards retain the exit result and the overview explains idle timing.
 
 Version 0.3.2 changes default auto-close to two minutes of sustained inactivity with a visible countdown. Startup checks overlap the idle window. Existing standard intervals migrate on load; customized intervals and launcher paths are retained.
+
+Version 0.3.3 stops user input from pausing maintenance by default, with a configurable pause option. Epic process monitoring supports Win32-to-Win64 handoff within Portal/Binaries. Installed Steam manifests no longer appear pending solely because of historical byte counters; blocked Steam maintenance lists the specific games and state flags.

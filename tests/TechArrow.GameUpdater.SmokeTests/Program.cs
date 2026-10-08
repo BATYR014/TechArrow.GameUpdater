@@ -188,6 +188,13 @@ try
     var installedUpdate = pendingUpdate with { Flags = 4, DownloadedBytes = 100, StagedBytes = 100 };
     SteamMonitorSample Sample(int seconds, string fingerprint, SteamUpdate update, bool reliable = true, bool? gameRunning = false)
         => new(now.AddSeconds(seconds), true, reliable, gameRunning, fingerprint, [update]);
+    var staleCountersPolicy = new SteamCompletionPolicy(10, 5, 1, allowNoUpdates: true);
+    var staleInstalled = installedUpdate with { TotalBytes = 1000, DownloadedBytes = 0, StageBytes = 1000, StagedBytes = 0 };
+    Check(!staleInstalled.Pending, "installed state does not treat historical counters as queued download");
+    staleCountersPolicy.Evaluate(Sample(0, "stale", staleInstalled));
+    Check(staleCountersPolicy.Evaluate(Sample(15, "stale", staleInstalled)).ReadyToClose, "idle installed manifest with historical counters permits maintenance exit");
+    Check(!staleCountersPolicy.Evaluate(Sample(16, "pending", staleInstalled with {Flags=6})).ReadyToClose, "pending flag still blocks exit despite quiet network");
+    Check(!defaults.PauseAutoCloseWhileUserActive, "user input does not pause default launcher maintenance");
     var emptyQueuePolicy = new SteamCompletionPolicy(10, 5, 1, allowNoUpdates: true);
     var idleInstall = installedUpdate with { TotalBytes = null, DownloadedBytes = null, StageBytes = null, StagedBytes = null };
     Check(!emptyQueuePolicy.Evaluate(Sample(0, "idle", idleInstall)).ReadyToClose, "maintenance without updates still waits for idle");

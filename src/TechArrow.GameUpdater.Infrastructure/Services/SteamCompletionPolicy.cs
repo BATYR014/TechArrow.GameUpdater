@@ -6,9 +6,9 @@ public sealed record SteamUpdate(string Id, string Name, long? Flags, long? Tota
     public long? ScheduledAutoUpdate { get; init; }
     public bool Complete => Flags == 4 && TotalBytes is not null && DownloadedBytes is not null &&
         DownloadedBytes >= TotalBytes && (StageBytes == 0 || StageBytes is not null && StagedBytes >= StageBytes);
-    public bool Pending => Flags is not null && (Flags & (2 | 256 | 512 | 1024 | 65536 | 131072 | 262144 | 524288 | 1048576 | 2097152 | 4194304 | 8388608)) != 0 ||
+    public bool Pending => Flags != 4 && (Flags is not null && (Flags & (2 | 256 | 512 | 1024 | 65536 | 131072 | 262144 | 524288 | 1048576 | 2097152 | 4194304 | 8388608)) != 0 ||
         TotalBytes is not null && DownloadedBytes is not null && DownloadedBytes < TotalBytes ||
-        StageBytes is not null && StagedBytes is not null && StagedBytes < StageBytes;
+        StageBytes is not null && StagedBytes is not null && StagedBytes < StageBytes);
     public double? DownloadPercent => TotalBytes > 0 && DownloadedBytes is not null && DownloadedBytes <= TotalBytes
         ? 100.0 * DownloadedBytes / TotalBytes : null;
     public string Phase => Complete ? "установлено" : Flags is null ? "состояние неизвестно" :
@@ -46,7 +46,7 @@ public sealed class SteamCompletionPolicy(int idleSeconds, int graceSeconds, int
             _quietSince = null;
             var stalled = _lastChange is not null && sample.Timestamp - _lastChange >= TimeSpan.FromMinutes(stuckMinutes);
             return stalled ? new("Возможно, обновление зависло", "Данные давно не меняются. Проверьте очередь загрузок и подключение в Steam.") :
-                new("Обновление / ожидание", "Загрузка, установка, пауза или очередь ещё не завершены.");
+                new("Обновление / ожидание", "Ожидаем: " + string.Join("; ", sample.Updates.Where(u => !u.Complete).Take(5).Select(u => u.Display + $" [StateFlags: {u.Flags?.ToString() ?? "нет"}]")));
         }
         if (_observed.Count == 0 && !noUpdates)
         { _quietSince = null; return new("Ожидание обновлений", "В этой сессии обновлений ещё не наблюдалось. Простой не означает завершение."); }
