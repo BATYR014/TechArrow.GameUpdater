@@ -81,3 +81,5 @@ open when the activity collector is unavailable. Includes all 0.2.8 measurements
 Version 0.3.0 unifies launcher cards and replaces fixed paths with an executable picker, automatic identification, and editable saved launcher entries. Only added clients are maintained. Update controls remain in About; automatic application updates are retained.
 
 Version 0.3.1 permits Steam maintenance to finish without observed downloads when readable installed manifests remain stable. Pending updates, games and network/disk activity still block exit. Launcher cards retain the exit result and the overview explains idle timing.
+
+Version 0.3.2 changes default auto-close to two minutes of sustained inactivity with a visible countdown. Startup checks overlap the idle window. Existing standard intervals migrate on load; customized intervals and launcher paths are retained.

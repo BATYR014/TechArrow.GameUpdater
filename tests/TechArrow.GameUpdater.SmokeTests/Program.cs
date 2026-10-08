@@ -8,6 +8,14 @@ try
     var paths = new AppPaths(Path.Combine(root, "settings-data"));
     using var service = new SettingsService(paths, NullLogger<SettingsService>.Instance);
     var defaults = await service.LoadAsync(default);
+    var migrationPaths = new AppPaths(Path.Combine(root, "timer-migration"));
+    using var migrationService = new SettingsService(migrationPaths, NullLogger<SettingsService>.Instance);
+    Directory.CreateDirectory(Path.GetDirectoryName(migrationPaths.SettingsFile)!);
+    await File.WriteAllTextAsync(migrationPaths.SettingsFile, "{\"IdleSeconds\":60,\"OtherLauncherIdleSeconds\":300,\"GraceSeconds\":90,\"SteamPath\":\"D:\\\\Steam\\\\steam.exe\"}");
+    var migratedTimers = await migrationService.LoadAsync(default);
+    Check(migratedTimers.IdleSeconds == 120 && migratedTimers.OtherLauncherIdleSeconds == 120 && migratedTimers.GraceSeconds == 0 && migratedTimers.SteamPath!.Contains("Steam"), "old standard timers migrate without losing launcher path");
+    await File.WriteAllTextAsync(migrationPaths.SettingsFile, "{\"IdleSeconds\":60,\"OtherLauncherIdleSeconds\":600,\"GraceSeconds\":90}");
+    Check((await migrationService.LoadAsync(default)).OtherLauncherIdleSeconds == 600 && (await migrationService.LoadAsync(default)).GraceSeconds == 90, "custom legacy timers remain unchanged");
     var activityTime = DateTimeOffset.UtcNow;
     var idlePolicy = new LauncherIdlePolicy(activityTime, 60, 30);
     LauncherActivitySample Quiet(int seconds, string identity = "10:100") => new(activityTime.AddSeconds(seconds), true, true, false, true, identity, 0, 0, "");
@@ -26,6 +34,12 @@ try
     Check(!idlePolicy.Evaluate(Quiet(620) with { HasMeasurement = false }).ReadyToClose, "initial counters cannot establish idle");
     Check(!idlePolicy.Evaluate(Quiet(630) with { IoBytesPerSecond = double.NaN }).ReadyToClose, "invalid counters block close");
     Check(idlePolicy.Evaluate(Quiet(640) with { IsRunning = false, Reliable = false }).State != "Клиент закрыт", "unreadable process is not reported as exited");
+    var quickPolicy = new LauncherIdlePolicy(activityTime, 120, 0, countStartupIdle: true);
+    quickPolicy.Evaluate(Quiet(0)); quickPolicy.Evaluate(Quiet(1));
+    Check(!quickPolicy.Evaluate(Quiet(120)).ReadyToClose && quickPolicy.Evaluate(Quiet(121)).ReadyToClose, "two-minute idle overlaps startup check");
+    Check(!quickPolicy.Evaluate(Quiet(122) with { IoBytesPerSecond = 12000 }).ReadyToClose, "activity resets two-minute timer");
+    quickPolicy.Evaluate(Quiet(123));
+    Check(!quickPolicy.Evaluate(Quiet(242)).ReadyToClose && quickPolicy.Evaluate(Quiet(243)).ReadyToClose, "reset requires another full two-minute idle");
     var separatePolicy = new LauncherIdlePolicy(activityTime, 60, 30, 1, 0.01, true);
     LauncherActivitySample Separate(int seconds) => Quiet(seconds) with { HasSeparateMeasurement = true };
     separatePolicy.Evaluate(Separate(120)); separatePolicy.Evaluate(Separate(121));
@@ -41,7 +55,7 @@ try
     Check(!separatePolicy.Evaluate(Separate(611) with {IoBytesPerSecond=65536}).ReadyToClose, "cached file I/O remains a conservative guard");
     Check(Enumerable.Range(1,7).All(i => LauncherProcessProfile.For(i).Frontends.Length > 0 && LauncherProcessProfile.For(i).TrayNames.Length > 0), "all seven launchers have explicit process and tray profiles");
     Check(!LauncherProcessProfile.Within(Path.Combine(root,"launcher-other","fake.exe"),Path.Combine(root,"launcher")), "similarly named directory is not a trusted launcher directory");
-    Check(defaults.AutoCloseOtherLaunchers && defaults.OtherLauncherIdleSeconds == 300, "other clients default to enabled close with five-minute idle");
+    Check(defaults.AutoCloseOtherLaunchers && defaults.OtherLauncherIdleSeconds == 120, "other clients default to enabled close with two-minute idle");
     using var otherSettings = new SettingsService(new AppPaths(Path.Combine(root,"other-settings")), NullLogger<SettingsService>.Instance);
     await otherSettings.SaveAsync(defaults with { AutoCloseOtherLaunchers = false, OtherLauncherIdleSeconds = 600 }, default);
     Check(!(await otherSettings.LoadAsync(default)).AutoCloseOtherLaunchers && (await otherSettings.LoadAsync(default)).OtherLauncherIdleSeconds == 600, "other launcher settings survive persistence");
@@ -114,7 +128,7 @@ try
     await Throws<InvalidDataException>(() => Task.Run(() => SteamScheduledUpdatePreparation.PrepareCandidate(scheduledManifest.Replace("\"StateFlags\" \"6\"", "\"StateFlags\" \"4\""))));
     await Throws<InvalidDataException>(() => Task.Run(() => SteamScheduledUpdatePreparation.PrepareCandidate(scheduledManifest.Replace("\"StateFlags\" \"6\"", "\"StateFlags\" \"1048582\""))));
     await Throws<InvalidDataException>(() => Task.Run(() => SteamScheduledUpdatePreparation.PrepareCandidate(scheduledManifest.Replace("\"AutoUpdateBehavior\" \"0\"", "\"AutoUpdateBehavior\" \"0\"\n\t\"AutoUpdateBehavior\" \"1\""))));
-    Check(defaults.GraceSeconds == 90 && defaults.IdleSeconds == 60 && !defaults.AllowForceClose && !defaults.ParallelUpdates, "safe defaults");
+    Check(defaults.GraceSeconds == 0 && defaults.IdleSeconds == 120 && !defaults.AllowForceClose && !defaults.ParallelUpdates, "safe defaults");
     Check(!Directory.Exists(paths.Root), "load missing configuration is read-only");
     Directory.CreateDirectory(Path.GetDirectoryName(paths.SettingsFile)!);
     await File.WriteAllTextAsync(paths.SettingsFile, "{\"SchemaVersion\":1,\"SteamPath\":\"legacy-steam.exe\"}");

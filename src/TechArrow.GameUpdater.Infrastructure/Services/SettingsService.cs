@@ -15,8 +15,12 @@ public sealed class SettingsService(AppPaths paths, ILogger<SettingsService> log
         {
             if (!File.Exists(FilePath)) return new AppSettings();
             await using var stream = File.OpenRead(FilePath);
-            var settings = await JsonSerializer.DeserializeAsync<AppSettings>(stream, JsonOptions, cancellationToken).ConfigureAwait(false)
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            var settings = document.RootElement.Deserialize<AppSettings>(JsonOptions)
                 ?? throw new InvalidDataException("Файл настроек пуст.");
+            if (!document.RootElement.TryGetProperty(nameof(AppSettings.AutoCloseTimerVersion), out _) &&
+                settings.IdleSeconds == 60 && settings.OtherLauncherIdleSeconds == 300 && settings.GraceSeconds == 90)
+                settings = settings with { IdleSeconds = 120, OtherLauncherIdleSeconds = 120, GraceSeconds = 0 };
             settings.Validate();
             logger.LogInformation("Настройки загружены.");
             return settings;

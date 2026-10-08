@@ -122,7 +122,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 var reader = await Task.Run(() => new LauncherProcessReader(request, configuration with { SteamPath = configuration.SteamPath ?? _steamExecutable }), token);
                 var policy = new LauncherIdlePolicy(started, configuration.OtherLauncherIdleSeconds, configuration.GraceSeconds,
-                    configuration.NetworkThresholdKb, configuration.DiskThresholdMb, requireSeparateMeasurement: true);
+                    configuration.NetworkThresholdKb, configuration.DiskThresholdMb, requireSeparateMeasurement: true, countStartupIdle: true);
                 while (true)
                 {
                     token.ThrowIfCancellationRequested();
@@ -374,7 +374,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             catch (Exception ex) { RecordDetail("Steam: измерения сети и диска недоступны; автозакрытие заблокировано. " + ex.Message, true); }
             var activityReader = new LauncherProcessReader(new(0, "Steam", executable), settings);
             var activityPolicy = new LauncherIdlePolicy(DateTimeOffset.UtcNow, settings.IdleSeconds, settings.GraceSeconds,
-                settings.NetworkThresholdKb, settings.DiskThresholdMb, requireSeparateMeasurement: true);
+                settings.NetworkThresholdKb, settings.DiskThresholdMb, requireSeparateMeasurement: true, countStartupIdle: true);
             using var reader = new SteamMonitorReader(executable);
             var policy = new SteamCompletionPolicy(settings.IdleSeconds, settings.GraceSeconds, settings.StuckTimeoutMinutes, allowNoUpdates: true);
             var logger = _logs.CreateLogger("SteamMonitor");

@@ -10,7 +10,8 @@ public sealed record AppSettings
     public int ScheduleDays { get; init; } = 62; // bit 0: Sunday, bit 1: Monday, ... bit 6: Saturday
     public bool ScheduleAutoCloseSteam { get; init; }
     public bool AutoCloseOtherLaunchers { get; init; } = true;
-    public int OtherLauncherIdleSeconds { get; init; } = 300;
+    public int OtherLauncherIdleSeconds { get; init; } = 120;
+    public int AutoCloseTimerVersion { get; init; } = 2;
     public int SchemaVersion { get; init; } = 1;
     public string? SteamPath { get; init; }
     public string? EpicPath { get; init; }
@@ -22,8 +23,8 @@ public sealed record AppSettings
     public string? WargamingPath { get; init; }
     public double NetworkThresholdKb { get; init; } = 100;
     public double DiskThresholdMb { get; init; } = 1;
-    public int IdleSeconds { get; init; } = 60;
-    public int GraceSeconds { get; init; } = 90;
+    public int IdleSeconds { get; init; } = 120;
+    public int GraceSeconds { get; init; } = 0;
     public int GracefulExitTimeoutSeconds { get; init; } = 120;
     public int StuckTimeoutMinutes { get; init; } = 30;
     public int InternetRetryMinutes { get; init; } = 10;

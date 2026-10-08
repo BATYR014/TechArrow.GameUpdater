@@ -8,7 +8,7 @@ public sealed record LauncherIdleDecision(string State, string Detail, bool Read
 
 // This policy detects sustained process inactivity, not completion of a vendor's download queue.
 public sealed class LauncherIdlePolicy(DateTimeOffset started, int idleSeconds, int graceSeconds,
-    double networkThresholdKb = 100, double diskThresholdMb = 1, bool requireSeparateMeasurement = false)
+    double networkThresholdKb = 100, double diskThresholdMb = 1, bool requireSeparateMeasurement = false, bool countStartupIdle = false)
 {
     private DateTimeOffset? _quietSince;
     private string? _identity;
@@ -26,7 +26,7 @@ public sealed class LauncherIdlePolicy(DateTimeOffset started, int idleSeconds, 
         if (requireSeparateMeasurement && (!sample.HasSeparateMeasurement || !double.IsFinite(sample.NetworkBytesPerSecond) ||
             !double.IsFinite(sample.DiskBytesPerSecond) || sample.NetworkBytesPerSecond < 0 || sample.DiskBytesPerSecond < 0))
         { _quietSince = null; return new("Измерения недоступны", sample.Detail.Length == 0 ? "Нет отдельных данных сети и диска. Закрытие заблокировано." : sample.Detail); }
-        if (sample.Timestamp - started < TimeSpan.FromSeconds(120))
+        if (!countStartupIdle && sample.Timestamp - started < TimeSpan.FromSeconds(120))
         { _quietSince = null; return new("Ожидание запуска", "Первые две минуты клиент проверяет обновления и авторизацию."); }
         var transferActive = requireSeparateMeasurement
             ? sample.NetworkBytesPerSecond > networkThresholdKb * 1024 || sample.DiskBytesPerSecond > diskThresholdMb * 1024 * 1024
@@ -43,7 +43,8 @@ public sealed class LauncherIdlePolicy(DateTimeOffset started, int idleSeconds, 
         }
         _quietSince ??= sample.Timestamp;
         var quiet = (sample.Timestamp - _quietSince.Value).TotalSeconds;
-        if (quiet < idleSeconds) return new("Проверка простоя", $"{metrics} · Ниже порогов: {quiet:F0} / {idleSeconds} сек.");
+        var remaining = Math.Max(idleSeconds + graceSeconds - quiet, 120 - (sample.Timestamp - started).TotalSeconds);
+        if (quiet < idleSeconds || remaining > graceSeconds) return new("Проверка простоя", $"{metrics} · До закрытия: {TimeSpan.FromSeconds(Math.Ceiling(remaining)):mm\\:ss}. Новая активность начнёт отсчёт заново.");
         if (quiet < (double)idleSeconds + graceSeconds)
             return new("Пауза перед закрытием", $"{metrics} · До запроса выхода: {Math.Ceiling(idleSeconds + graceSeconds - quiet)} сек. Новая активность отменит отсчёт.");
         return new("Клиент без активности", "Зафиксирован устойчивый простой процессов. Это не подтверждение завершения очереди обновлений.", true);

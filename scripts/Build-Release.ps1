@@ -1,5 +1,5 @@
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.3.1',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.3.2',
     [string]$UpdateSource = 'https://github.com/BATYR014/TechArrow.GameUpdater'
 )
 $ErrorActionPreference = 'Stop'
