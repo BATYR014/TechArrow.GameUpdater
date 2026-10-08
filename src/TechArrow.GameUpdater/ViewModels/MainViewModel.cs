@@ -388,6 +388,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     lastState = decision.State;
                 }
                 if (!reading.Sample.IsRunning) break;
+                if (decision.ReadyToClose && AutoCloseSteam && !LauncherActivityCollector.Shared.IsEnabled)
+                {
+                    MonitorStatus = "Steam оставлен открытым";
+                    MonitorDetail = "Обновления подтверждены манифестами, но измерения сети и диска недоступны. Автозакрытие заблокировано.";
+                    RecordDetail(MonitorDetail, true); break;
+                }
                 if (decision.ReadyToClose && AutoCloseSteam && activityDecision.ReadyToClose)
                 {
                     // Re-read immediately before sending the exit request. Any activity resets the countdown.
