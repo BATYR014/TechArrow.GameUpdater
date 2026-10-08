@@ -8,6 +8,26 @@ try
     var paths = new AppPaths(Path.Combine(root, "settings-data"));
     using var service = new SettingsService(paths, NullLogger<SettingsService>.Instance);
     var defaults = await service.LoadAsync(default);
+    var historyPaths = new AppPaths(Path.Combine(root, "history-data"));
+    var history = new RunHistoryService(historyPaths);
+    var recordedRun = history.Begin("Обновить всё");
+    history.Add(recordedRun, "Epic: запуск отправлен; завершение неизвестно.");
+    history.Finish(recordedRun, "Завершено с ошибками");
+    var loadedHistory = new RunHistoryService(historyPaths);
+    Check(loadedHistory.Snapshot[0].Id == recordedRun && loadedHistory.Snapshot[0].Details.Count == 1 && loadedHistory.Snapshot[0].Result == "Завершено с ошибками", "history persists run identity, results and details across restart");
+    loadedHistory.Begin("По расписанию");
+    Check(new RunHistoryService(historyPaths).Snapshot[0].Result.StartsWith("Прервано"), "unfinished session is interrupted rather than successful after restart");
+    var historyFile = Path.Combine(historyPaths.Root, "History", "runs.json");
+    await File.WriteAllTextAsync(historyFile, "{broken");
+    await Throws<System.Text.Json.JsonException>(() => Task.Run(() => new RunHistoryService(historyPaths)));
+    Check(await File.ReadAllTextAsync(historyFile) == "{broken", "corrupt history remains untouched");
+    var notificationPolicy = new ErrorNotificationPolicy();
+    var notificationTime = DateTimeOffset.UtcNow;
+    Check(notificationPolicy.ShouldNotify(notificationTime) && !notificationPolicy.ShouldNotify(notificationTime.AddSeconds(5)) && notificationPolicy.ShouldNotify(notificationTime.AddMinutes(1)), "error notifications are throttled for one minute");
+    Check(ClubEndpointPolicy.Validate("https://clubs.example.com").AbsoluteUri == "https://clubs.example.com/", "HTTPS club endpoint accepted");
+    Check(ClubEndpointPolicy.Validate("http://localhost:5080").IsLoopback, "local HTTP club test accepted");
+    foreach (var invalidEndpoint in new[] { "http://example.com", "https://user:password@example.com", "file:///tmp/data", "https://example.com?key=secret" })
+        await Throws<InvalidDataException>(() => Task.Run(() => ClubEndpointPolicy.Validate(invalidEndpoint)));
     var launcherFixture = Path.Combine(root, "launcher-fixture");
     Directory.CreateDirectory(launcherFixture);
     var testExecutable = Path.Combine(launcherFixture, "client.exe");

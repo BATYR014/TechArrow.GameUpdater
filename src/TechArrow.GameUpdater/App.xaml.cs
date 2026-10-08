@@ -21,6 +21,8 @@ public partial class App : Application
     private EventWaitHandle? _activateEvent, _exitEvent;
     private RegisteredWaitHandle? _activateWait, _exitWait;
     private bool _ownsMutex, _exiting, _shutdownStarted, _trayHintShown, _activationRequested;
+    private LoggingService? _notificationLogs;
+    private readonly ErrorNotificationPolicy _notificationPolicy = new();
     private const string InstanceName = "Local\\TechArrow.GameUpdater";
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -54,16 +56,19 @@ public partial class App : Application
             collection.AddSingleton<SettingsViewModel>();
             collection.AddSingleton<MainViewModel>();
             collection.AddSingleton<AppUpdatesViewModel>();
+            collection.AddSingleton<ClubViewModel>();
             collection.AddSingleton<MainWindow>();
             _services = collection.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
             var logger = _services.GetRequiredService<ILogger<App>>();
-            logger.LogInformation("TechArrow Game Updater v0.1.0. Steam, расписание и системный трей.");
+            logger.LogInformation("TechArrow Game Updater {Version}. Steam, расписание и системный трей.", typeof(App).Assembly.GetName().Version?.ToString(3));
             var window = _services.GetRequiredService<MainWindow>();
             _viewModel = _services.GetRequiredService<MainViewModel>();
             MainWindow = window;
             window.Closing += OnMainWindowClosing;
             window.Closed += OnMainWindowClosed;
             CreateTray();
+            _notificationLogs = _services.GetRequiredService<LoggingService>();
+            _notificationLogs.EntryAdded += OnErrorLog;
             if (!e.Args.Contains("--tray", StringComparer.OrdinalIgnoreCase) || _activationRequested) window.Show();
             await _services.GetRequiredService<SettingsViewModel>().LoadAsync();
             if (_exiting) return;
@@ -102,6 +107,18 @@ public partial class App : Application
     }
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     { if (e.PropertyName == nameof(MainViewModel.MonitorStatus)) UpdateTray(); }
+    private void OnErrorLog(LogEntry entry)
+    {
+        if (entry.Level < LogLevel.Warning || _exiting) return;
+        Dispatcher.BeginInvoke((Action)(() =>
+        {
+            if (_tray is null || _exiting || !_notificationPolicy.ShouldNotify(DateTimeOffset.UtcNow)) return;
+            var message = entry.Message.Split('\n')[0].Trim();
+            if (message.Length > 220) message = message[..220] + "…";
+            _tray.ShowBalloonTip(8000, "TechArrow · " + entry.Category, message + " Откройте журнал событий.",
+                entry.Level >= LogLevel.Error ? Forms.ToolTipIcon.Error : Forms.ToolTipIcon.Warning);
+        }));
+    }
     private void OnStopCanExecuteChanged(object? sender, EventArgs e) => UpdateTray();
     private void UpdateTray()
     {
@@ -170,6 +187,7 @@ public partial class App : Application
     }
     private void DisposeTray()
     {
+        if (_notificationLogs is not null) { _notificationLogs.EntryAdded -= OnErrorLog; _notificationLogs = null; }
         if (_viewModel is not null)
         {
             _viewModel.PropertyChanged -= OnViewModelChanged;

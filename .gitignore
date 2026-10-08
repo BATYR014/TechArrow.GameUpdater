@@ -7,3 +7,4 @@ Logs/
 Config/settings.json
 
 artifacts/
+src/TechArrow.ClubServer/Data/

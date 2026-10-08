@@ -8,7 +8,15 @@ public partial class MainWindow : Window
 {
     private bool _selectingFile;
     public bool CanRestartForUpdate => !_selectingFile;
-    public MainWindow(MainViewModel viewModel, AppUpdatesViewModel updates) { InitializeComponent(); viewModel.Updates = updates; DataContext = viewModel; Title = "TechArrow Game Updater — v" + updates.CurrentVersion; }
+    public MainWindow(MainViewModel viewModel, AppUpdatesViewModel updates, ClubViewModel club) { InitializeComponent(); viewModel.Updates = updates; viewModel.Club = club; DataContext = viewModel; Title = "TechArrow Game Updater — v" + updates.CurrentVersion; }
+    private async void ConnectClub_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel { Club: not null } model) return;
+        var key = ClubDeviceKey.Password;
+        ClubDeviceKey.Clear();
+        try { await model.Club.ConnectAsync(key); }
+        catch (Exception ex) { model.Club.Error(ex); }
+    }
     private async void ChooseExecutable_Click(object sender, RoutedEventArgs e)
     {
         if (_selectingFile || sender is not Button { Tag: string launcher } || DataContext is not MainViewModel viewModel ||

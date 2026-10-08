@@ -23,6 +23,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Smoke checks failed.' }
           dotnet run --project tests/TechArrow.GameUpdater.WindowsTests/TechArrow.GameUpdater.WindowsTests.csproj
           if ($LASTEXITCODE -ne 0) { throw 'Windows checks failed.' }
+          dotnet build src/TechArrow.ClubServer/TechArrow.ClubServer.csproj
+          if ($LASTEXITCODE -ne 0) { throw 'Club server build failed.' }
+          dotnet run --project tests/TechArrow.ClubServer.Tests/TechArrow.ClubServer.Tests.csproj -- src/TechArrow.ClubServer/bin/Debug/net8.0/TechArrow.ClubServer.dll
+          if ($LASTEXITCODE -ne 0) { throw 'Club server integration checks failed.' }
       - name: Build installer and update packages
         shell: pwsh
         env:
@@ -30,6 +34,9 @@ jobs:
           RELEASE_REPOSITORY: ${{ github.repository }}
         run: |
           ./scripts/Build-Release.ps1 -Version $env:RELEASE_VERSION -UpdateSource "https://github.com/$env:RELEASE_REPOSITORY"
+          dotnet publish src/TechArrow.ClubServer/TechArrow.ClubServer.csproj -c Release -p:Version=$env:RELEASE_VERSION -o artifacts/club-server
+          if ($LASTEXITCODE -ne 0) { throw 'Club server publish failed.' }
+          Compress-Archive -Path artifacts/club-server/* -DestinationPath "artifacts/Releases/TechArrow-ClubServer-$env:RELEASE_VERSION.zip"
       - name: Publish release
         shell: pwsh
         env:

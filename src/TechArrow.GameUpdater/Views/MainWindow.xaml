@@ -151,6 +151,25 @@
                 </StackPanel>
             </ScrollViewer>
         </TabItem>
+        <TabItem Header="История запусков">
+            <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <StackPanel><TextBlock Text="История запусков" Style="{StaticResource PageTitle}"/><TextBlock Text="Последние 50 запусков · время UTC+5 · полный список до 500 запусков сохраняется локально. Завершение загрузок остальных клиентов не подтверждается." Style="{StaticResource Caption}" Margin="0,8,0,24"/></StackPanel>
+                <TextBox Grid.Row="1" Text="{Binding HistoryText, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontSize="14" Padding="18" AutomationProperties.Name="История запусков"/>
+            </Grid>
+        </TabItem>
+        <TabItem Header="Кабинет клубов">
+            <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel DataContext="{Binding Club}" Margin="0,0,8,0">
+                <TextBlock Text="Кабинет клубов" Style="{StaticResource PageTitle}"/>
+                <TextBlock Text="Подключите этот компьютер к своему серверу. В кабинете видны состояние клиентов, версия программы и последние запуски." Style="{StaticResource Caption}" Margin="0,10,0,24"/>
+                <Border Style="{StaticResource Card}"><StackPanel>
+                    <TextBlock Text="Адрес сервера" FontWeight="SemiBold"/><TextBox Text="{Binding Server, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Адрес сервера кабинета" Margin="0,8,0,16"/>
+                    <TextBlock Text="Ключ этого компьютера" FontWeight="SemiBold"/><PasswordBox x:Name="ClubDeviceKey" Background="#101B2A" Foreground="#F1F5FC" BorderBrush="#3B5069" Padding="12" FontSize="16" Margin="0,8,0,16" AutomationProperties.Name="Ключ компьютера"/>
+                    <WrapPanel><Button Content="Подключить" Click="ConnectClub_Click" Margin="0,0,12,8"/><Button Content="Отправить состояние" Command="{Binding SendCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,12,8"/><Button Content="Отключить" Command="{Binding DisconnectCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,0,8"/></WrapPanel>
+                    <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Margin="0,12,0,0"/>
+                </StackPanel></Border>
+                <TextBlock Text="Создайте отдельный ключ в веб-кабинете для каждого ПК. Для связи через интернет нужен HTTPS. Передаются только статусы клиентов и краткая история запусков; пути игр, подробные логи и пароли не отправляются. Ключ хранится локально в зашифрованном виде." Style="{StaticResource Caption}"/>
+            </StackPanel></ScrollViewer>
+        </TabItem>
         <TabItem Header="Журнал событий">
             <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <StackPanel><TextBlock Text="Журнал событий" Style="{StaticResource PageTitle}"/><TextBlock Text="Действия приложения и сообщения об ошибках." Style="{StaticResource Caption}" Margin="0,0,0,24"/></StackPanel>
@@ -170,8 +189,8 @@
                     <ProgressBar Value="{Binding Progress, Mode=OneWay}" Maximum="100" Height="6" Margin="0,0,0,16"/>
                     <WrapPanel><Button Content="Проверить обновления" Command="{Binding CheckCommand}" Margin="0,0,12,8"/><Button Content="Установить и перезапустить" Command="{Binding InstallCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,0,8"/></WrapPanel>
                 </StackPanel></Border>
-                <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Что уже доступно" FontSize="21" FontWeight="SemiBold"/><TextBlock Text="Поиск Steam и библиотек, список установленных игр, запуск клиента, настройки JSON и журнал событий." Margin="0,12,0,0" Style="{StaticResource Caption}"/></StackPanel></Border>
-                <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Следующие этапы" FontSize="21" FontWeight="SemiBold"/><TextBlock Margin="0,16,0,0" Text="05–06   Epic, Lesta, Battle.net, EA, Riot, VK Play и Wargaming&#10;&#10;07         История SQLite&#10;&#10;09–10   Telegram и установщик"/></StackPanel></Border>
+                <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Что уже доступно" FontSize="21" FontWeight="SemiBold"/><TextBlock Text="Общее обслуживание клиентов, очередь Steam, история запусков, уведомления об ошибках и подключение к кабинету клубов." Margin="0,12,0,0" Style="{StaticResource Caption}"/></StackPanel></Border>
+                <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Следующие этапы" FontSize="21" FontWeight="SemiBold"/><TextBlock Margin="0,16,0,0" Text="05–06   Epic, Lesta, Battle.net, EA, Riot, VK Play и Wargaming&#10;&#10;07         История запусков и кабинет клубов&#10;&#10;09–10   Telegram и установщик"/></StackPanel></Border>
                 <Border Style="{StaticResource Card}" Background="#1B3038" BorderBrush="#365762"><StackPanel><TextBlock Text="Безопасность аккаунтов" FontSize="19" FontWeight="SemiBold" Foreground="#ADFFED"/><TextBlock Text="Логины, пароли и коды двухфакторной авторизации не запрашиваются и не хранятся. Будущие модули будут использовать сохранённые сессии официальных клиентов." Style="{StaticResource Caption}" Margin="0,10,0,0"/></StackPanel></Border>
             </StackPanel></ScrollViewer>
         </TabItem>

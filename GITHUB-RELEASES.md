@@ -37,3 +37,10 @@ independently. Their own automatic game updates must be enabled and the user
 must be signed in. This version does not force their queues, verify their game
 download completion or close them. The same client startup runs on schedule;
 missing Steam no longer prevents other selected clients from starting.
+
+Version 0.2.3 adds persistent run history, tray warnings and errors, and an
+optional club-server connection. History distinguishes verified Steam updates
+from launcher startup requests, failures, stops and interrupted sessions.
+The separate TechArrow-ClubServer archive contains the web dashboard and API.
+Deploy it on an HTTPS server before connecting remote clubs; GitHub Releases
+does not host that API. See CLUB-SERVER.md for deployment and data scope.

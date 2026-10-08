@@ -15,6 +15,7 @@ public sealed class LoggingService : ILoggerProvider, IAsyncDisposable
     private string? _writeError;
     public string? WriteError => Volatile.Read(ref _writeError);
     public IReadOnlyList<LogEntry> Snapshot => _recent.ToArray();
+    public event Action<LogEntry>? EntryAdded;
     public LoggingService(AppPaths paths) { _paths = paths; _writer = Task.Run(WriteLoopAsync); }
     public ILogger CreateLogger(string categoryName) => new FileLogger(this, categoryName);
     private void Add(LogEntry entry)
@@ -22,6 +23,8 @@ public sealed class LoggingService : ILoggerProvider, IAsyncDisposable
         _recent.Enqueue(entry);
         while (_recent.Count > 1000) _recent.TryDequeue(out _);
         _queue.Writer.TryWrite(entry);
+        try { EntryAdded?.Invoke(entry); }
+        catch (Exception ex) { System.Diagnostics.Trace.TraceError("Log observer failed: {0}", ex); }
     }
     private async Task WriteLoopAsync()
     {

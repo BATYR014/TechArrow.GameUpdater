@@ -4,6 +4,21 @@ Velopack.VelopackApp.Build().SetAutoApplyOnStartup(false).Run();
 var testKey = @"Software\TechArrow\StartupTests\" + Guid.NewGuid().ToString("N");
 try
 {
+    var connectionPaths = new TechArrow.GameUpdater.Infrastructure.Services.AppPaths(Path.Combine(Path.GetTempPath(), "TechArrowClubKeyTests-" + Guid.NewGuid().ToString("N")));
+    try
+    {
+        using var club = new ClubConnectionService(connectionPaths);
+        var key = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        var connection = club.Create("https://clubs.example.com", key);
+        club.Save(connection);
+        var stored = File.ReadAllText(Path.Combine(connectionPaths.Root, "Config", "club-connection.json"));
+        Check(!stored.Contains(key) && club.Load() == connection, "club device key persists encrypted under the Windows user");
+        var decrypted = System.Security.Cryptography.ProtectedData.Unprotect(Convert.FromBase64String(connection.EncryptedKey), null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+        Check(System.Text.Encoding.UTF8.GetString(decrypted) == key, "DPAPI key can be recovered by its own user");
+        club.Disconnect();
+        Check(club.Load() is null, "disconnect removes local enrollment");
+    }
+    finally { if (Directory.Exists(connectionPaths.Root)) Directory.Delete(connectionPaths.Root, true); }
     var startup = new WindowsStartupService(testKey);
     Check(!startup.IsEnabled, "autostart is disabled by default");
     startup.SetEnabled(true);

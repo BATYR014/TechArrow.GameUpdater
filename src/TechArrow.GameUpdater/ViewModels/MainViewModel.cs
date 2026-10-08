@@ -14,6 +14,46 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string NextMaintenance { get => _nextMaintenance; private set => Set(ref _nextMaintenance, value); }
     public string ScheduleStatus { get => _scheduleStatus; private set => Set(ref _scheduleStatus, value); }
     private readonly string _steamBackups;
+    private RunHistoryService? _history;
+    private Guid? _currentRun;
+    private bool _runFailed, _runCancelled;
+    private bool _recordingRun;
+    private string _historyError = "";
+    public IReadOnlyList<RunHistoryEntry> RecentRuns => _history?.Snapshot ?? [];
+    private string _historyText = "История пока пуста.";
+    public string HistoryText { get => _historyText; private set => Set(ref _historyText, value); }
+    private void RecordDetail(string detail, bool error = false)
+    {
+        _runFailed |= error;
+        if (_currentRun is not Guid id || _history is null) return;
+        try { _history.Add(id, detail); }
+        catch (Exception ex) { _historyError = "История недоступна: " + ex.Message; }
+    }
+    private void BeginRun(string kind)
+    {
+        _recordingRun = true;
+        _runFailed = false; _runCancelled = false;
+        try { _currentRun = _history?.Begin(kind); }
+        catch (Exception ex) { _historyError = "История недоступна: " + ex.Message; }
+    }
+    private void FinishRun()
+    {
+        try
+        {
+            if (_currentRun is Guid id) _history?.Finish(id, _runCancelled ? "Остановлено" : _runFailed ? "Завершено с ошибками" : "Сессия закончена — см. результаты клиентов");
+        }
+        catch (Exception ex) { _historyError = "История недоступна: " + ex.Message; }
+        finally { _currentRun = null; _recordingRun = false; if (!_disposed) RefreshSteamCommands(); }
+    }
+    private async Task RunRecordedAsync(string kind, Func<Task> action)
+    {
+        BeginRun(kind);
+        RefreshSteamCommands();
+        try { await action(); }
+        catch (OperationCanceledException) { _runCancelled = true; throw; }
+        catch (Exception ex) { RecordDetail(ex.Message, true); throw; }
+        finally { FinishRun(); }
+    }
     public AsyncCommand UpdateSteamCommand { get; }
     public AsyncCommand UpdateAllCommand { get; }
     private string _allUpdateStatus = "Выберите .exe клиентов в настройках. Для остальных лаунчеров включите автообновления игр в самом клиенте.";
@@ -33,6 +73,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 { card.Status = "Общий файл клиента"; card.Detail = "Этот .exe уже обработан для другого лаунчера. Проверьте выбранные пути."; continue; }
                 var result = await Task.Run(() => LauncherStartupService.Start(request, token), token);
                 card.Status = result.Status; card.Detail = result.Detail;
+                RecordDetail(request.Name + ": " + result.Status + ". Завершение загрузок не проверяется.");
                 if (executable is null) missing++; else requested++;
                 _logs.CreateLogger("Launchers").LogInformation("{Launcher}: {Status}", request.Name, result.Status);
             }
@@ -40,6 +81,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             catch (Exception ex)
             {
                 failed++; card.Status = "Ошибка запуска"; card.Detail = ex.Message;
+                RecordDetail(request.Name + ": " + ex.Message, true);
                 _logs.CreateLogger("Launchers").LogError(ex, "Ошибка запуска {Launcher}", request.Name);
             }
         }
@@ -57,12 +99,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             await StartOtherLaunchersAsync(Settings.SavedSettings, cancellation.Token);
             var steam = await _steam.ScanAsync(Settings.SavedSettings.SteamPath);
             if (steam.ExecutablePath is null)
-            { SteamWarnings = "Steam не найден. Остальные выбранные клиенты обработаны."; return; }
+            { SteamWarnings = "Steam не найден. Остальные выбранные клиенты обработаны."; RecordDetail(SteamWarnings); return; }
             await PrepareAndStartSteamAsync(Settings.SavedSettings, cancellation.Token);
             await MonitorSteamAsync(Settings.SavedSettings, cancellation.Token);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        { AllUpdateStatus = "Обслуживание остановлено. Уже открытые клиенты продолжают работать."; }
+        { _runCancelled = true; AllUpdateStatus = "Обслуживание остановлено. Уже открытые клиенты продолжают работать."; }
         finally { _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
     }
     private async Task PrepareAndStartSteamAsync(AppSettings configuration, CancellationToken token)
@@ -89,6 +131,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             ScheduleStatus = "Подготовка отложенных обновлений во всех библиотеках…";
             var result = await Task.Run(() => SteamScheduledUpdatePreparation.PrepareLibraries(inventory.Libraries, _steamBackups, token), token);
             SteamWarnings = string.Join(Environment.NewLine, result.Warnings);
+            foreach (var name in result.Prepared) RecordDetail(name + ": отложенное обновление подготовлено к загрузке.");
+            foreach (var warning in result.Warnings) RecordDetail(warning, true);
             var logger = _logs.CreateLogger("SteamQueue");
             logger.LogInformation("Подготовлены отложенные обновления: {Games}. Резервные копии: {Backups}", string.Join(", ", result.Prepared), _steamBackups);
             foreach (var warning in result.Warnings) logger.LogWarning("{Warning}", warning);
@@ -117,7 +161,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             await MonitorSteamAsync(Settings.SavedSettings, cancellation.Token);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        { ScheduleStatus = "Обслуживание остановлено."; }
+        { _runCancelled = true; ScheduleStatus = "Обслуживание остановлено."; }
         finally { _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
     }
     private async Task CheckScheduleAsync()
@@ -129,7 +173,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         NextMaintenance = next is null ? "Расписание выключено" : $"{next:dd.MM.yyyy HH:mm} · Кызылорда (UTC+5)";
         var due = WeeklySchedule.Due(configuration, now);
         if (due is null || _handledOccurrence == due || _scheduleBusy) return;
-        var occupied = _monitoring || !ScanSteamCommand.CanExecute(null) || (!StartSteamCommand.CanExecute(null) && _steamExecutable is not null);
+        var occupied = _recordingRun || _monitoring || !ScanSteamCommand.CanExecute(null) || (!StartSteamCommand.CanExecute(null) && _steamExecutable is not null);
         _scheduleBusy = true;
         using var scheduledCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _scheduledCancellation = scheduledCancellation;
@@ -137,6 +181,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RefreshSteamCommands();
         _handledOccurrence = due;
         var logger = _logs.CreateLogger("Schedule");
+        bool recorded = false;
         try
         {
             if (!await Task.Run(() => _scheduleStore.TryClaim(due.Value), scheduleToken)) return;
@@ -144,8 +189,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (occupied)
             {
                 ScheduleStatus = "Запуск пропущен: Steam уже обслуживается.";
+                try
+                {
+                    if (_history is not null)
+                    {
+                        var skipped = _history.Begin("По расписанию");
+                        _history.Add(skipped, ScheduleStatus);
+                        _history.Finish(skipped, "Пропущено: обслуживание уже выполняется");
+                    }
+                }
+                catch (Exception ex) { _historyError = "История недоступна: " + ex.Message; }
                 logger.LogInformation("{Status}", ScheduleStatus); return;
             }
+            BeginRun("По расписанию"); recorded = true;
             ScheduleStatus = "Запуск Steam по расписанию…";
             await StartOtherLaunchersAsync(configuration, scheduleToken);
             await ScanSteamPathAsync(configuration.SteamPath);
@@ -171,17 +227,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             await MonitorSteamAsync(configuration, scheduleToken);
             ScheduleStatus = "Сессия по расписанию завершена: " + MonitorStatus;
         }
-        catch (OperationCanceledException) when (scheduleToken.IsCancellationRequested) { if (!_disposed) ScheduleStatus = "Запуск по расписанию остановлен."; }
+        catch (OperationCanceledException) when (scheduleToken.IsCancellationRequested) { _runCancelled = true; if (!_disposed) ScheduleStatus = "Запуск по расписанию остановлен."; }
         catch (Exception ex)
         {
+            RecordDetail(ex.Message, true);
             if (!_disposed) { ScheduleStatus = "Ошибка расписания: " + ex.Message; logger.LogError(ex, "Ошибка обслуживания по расписанию"); }
         }
-        finally { _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
+        finally { if (recorded) FinishRun(); _scheduledCancellation = null; _scheduleBusy = false; if (!_disposed) RefreshSteamCommands(); }
     }
     private CancellationTokenSource? _monitorCancellation;
     private bool _monitoring, _disposed, _autoCloseSteam;
     private string _monitorStatus = "Мониторинг выключен", _monitorDetail = "Откройте Steam и запустите мониторинг.", _updateText = "";
-    public bool CanChangeLauncherPaths => !_monitoring && !_scheduleBusy;
+    public bool CanChangeLauncherPaths => !_monitoring && !_scheduleBusy && !_recordingRun;
     public bool AutoCloseSteam { get => _autoCloseSteam; set => Set(ref _autoCloseSteam, value); }
     public string MonitorStatus { get => _monitorStatus; private set => Set(ref _monitorStatus, value); }
     public string MonitorDetail { get => _monitorDetail; private set => Set(ref _monitorDetail, value); }
@@ -211,18 +268,30 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             var logger = _logs.CreateLogger("SteamMonitor");
             logger.LogInformation("Мониторинг Steam запущен: простой {Idle} сек., пауза {Grace} сек.", settings.IdleSeconds, settings.GraceSeconds);
             string lastState = "";
+            var observed = new HashSet<string>();
             while (true)
             {
                 cancellation.Token.ThrowIfCancellationRequested();
                 var reading = await Task.Run(reader.Read, cancellation.Token);
                 cancellation.Token.ThrowIfCancellationRequested();
                 var decision = policy.Evaluate(reading.Sample);
+                foreach (var update in reading.Sample.Updates)
+                {
+                    if (update.Pending) observed.Add(update.Id);
+                    else if (reading.Sample.Reliable && update.Complete && observed.Remove(update.Id))
+                        RecordDetail(update.Name + ": скачивание и установка подтверждены манифестом.");
+                }
                 MonitorStatus = decision.State; MonitorDetail = decision.Detail;
                 UpdateText = string.Join(Environment.NewLine, reading.Sample.Updates.Select(u => u.Display));
                 SteamWarnings = string.Join(Environment.NewLine, reading.Inventory.Warnings);
                 Launchers[0].Games = reading.Inventory.Games;
                 if (lastState != decision.State)
-                { logger.LogInformation("Steam: {State}. {Detail}", decision.State, decision.Detail); lastState = decision.State; }
+                {
+                    RecordDetail("Steam: " + decision.State + ". " + decision.Detail);
+                    logger.LogInformation("Steam: {State}. {Detail}", decision.State, decision.Detail);
+                    if (decision.State is "Возможно, обновление зависло" or "Недостаточно данных") logger.LogWarning("Steam: {Detail}", decision.Detail);
+                    lastState = decision.State;
+                }
                 if (!reading.Sample.IsRunning) break;
                 if (decision.ReadyToClose && AutoCloseSteam)
                 {
@@ -243,13 +312,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     MonitorStatus = exited ? "Готово · Steam закрыт" : "Steam не завершился";
                     MonitorDetail = exited ? "Наблюдавшиеся обновления завершены, клиент корректно закрыт." : "Время ожидания истекло. Клиент оставлен открытым; проверьте окно Steam.";
                     logger.LogInformation("Результат выхода Steam: {Exited}", exited);
+                    RecordDetail(MonitorDetail, !exited);
+                    if (!exited) logger.LogWarning("{Detail}", MonitorDetail);
                     break;
                 }
                 await Task.Delay(TimeSpan.FromSeconds(3), cancellation.Token);
             }
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        { if (!_disposed) { MonitorStatus = "Мониторинг остановлен"; MonitorDetail = "Новые команды закрытия не отправляются."; } }
+        { _runCancelled = true; if (!_disposed) { MonitorStatus = "Мониторинг остановлен"; MonitorDetail = "Новые команды закрытия не отправляются."; } }
         catch (Exception ex)
         { if (!_disposed) { MonitorStatus = "Ошибка мониторинга"; MonitorDetail = ex.Message; SteamError(ex); } }
         finally
@@ -270,6 +341,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public AsyncCommand StartSteamCommand { get; }
     private void SteamError(Exception ex)
     {
+        RecordDetail(ex.Message, true);
         SteamWarnings = "Ошибка Steam: " + ex.Message;
         _logs.CreateLogger("Steam").LogError(ex, "Ошибка модуля Steam");
     }
@@ -293,6 +365,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (_steamExecutable is null) return;
         _steam.Start(_steamExecutable);
+        RecordDetail("Steam: запрос запуска отправлен.");
         await ScanSteamAsync();
     }
     private readonly DispatcherTimer _timer;
@@ -300,12 +373,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public MainViewModel(SettingsViewModel settings, LoggingService logs, AppPaths paths)
     {
         Settings = settings; _logs = logs; _scheduleStore = new(paths);
+        try { _history = new(paths); }
+        catch (Exception ex) { _historyError = "История недоступна: " + ex.Message; logs.CreateLogger("History").LogError(ex, "Не удалось прочитать историю запусков. Исходный файл сохранён."); }
         _steamBackups = System.IO.Path.Combine(paths.Root, "SteamManifestBackups");
-        UpdateSteamCommand = new(UpdateSteamAsync, SteamError, () => Settings.CanSelectFiles && !_monitoring && !_scheduleBusy);
-        UpdateAllCommand = new(UpdateAllAsync, SteamError, () => Settings.CanSelectFiles && !_monitoring && !_scheduleBusy);
-        ScanSteamCommand = new(ScanSteamAsync, SteamError, () => !_monitoring && !_scheduleBusy);
-        StartSteamCommand = new(StartSteamAsync, SteamError, () => _steamExecutable is not null && !_monitoring && !_scheduleBusy);
-        MonitorSteamCommand = new(() => MonitorSteamAsync(), SteamError, () => _steamExecutable is not null && !_monitoring && !_scheduleBusy);
+        UpdateSteamCommand = new(() => RunRecordedAsync("Обновления Steam", UpdateSteamAsync), SteamError, () => Settings.CanSelectFiles && CanChangeLauncherPaths);
+        UpdateAllCommand = new(() => RunRecordedAsync("Обновить всё", UpdateAllAsync), SteamError, () => Settings.CanSelectFiles && CanChangeLauncherPaths);
+        ScanSteamCommand = new(ScanSteamAsync, SteamError, () => CanChangeLauncherPaths);
+        StartSteamCommand = new(() => RunRecordedAsync("Открыть Steam", StartSteamAsync), SteamError, () => _steamExecutable is not null && CanChangeLauncherPaths);
+        MonitorSteamCommand = new(() => RunRecordedAsync("Мониторинг Steam", () => MonitorSteamAsync()), SteamError, () => _steamExecutable is not null && CanChangeLauncherPaths);
         StopMonitorCommand = new(() => { _monitorCancellation?.Cancel(); _scheduledCancellation?.Cancel(); return Task.CompletedTask; }, SteamError, () => _monitoring || _scheduleBusy);
         Settings.PropertyChanged += OnSettingsChanged;
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -313,6 +388,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
     public SettingsViewModel Settings { get; }
     public AppUpdatesViewModel? Updates { get; set; }
+    public ClubViewModel? Club { get; set; }
     public IReadOnlyList<LauncherCardViewModel> Launchers { get; } = [new("Steam", "Подготовка очереди и мониторинг"), new("Epic Games", "Автообновления клиента"), new("Lesta Game Center", "Автообновления клиента"), new("Battle.net", "Автообновления клиента"), new("EA app", "Автообновления клиента"), new("Riot Client", "Автообновления клиента"), new("VK Play", "Автообновления клиента"), new("Wargaming Game Center", "Автообновления клиента")];
     public string LogText { get => _logText; private set => Set(ref _logText, value); }
     public string LogError { get => _logError; private set => Set(ref _logError, value); }
@@ -330,6 +406,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         LogText = string.Join(Environment.NewLine, _logs.Snapshot);
         LogError = _logs.WriteError ?? "";
+        HistoryText = _historyError.Length > 0 ? _historyError : string.Join(Environment.NewLine + Environment.NewLine,
+            RecentRuns.Take(50).Select(run => $"{run.Started.ToOffset(TimeSpan.FromHours(5)):dd.MM.yyyy HH:mm:ss} · {run.Kind}\n{run.Result}\n" + string.Join(Environment.NewLine, run.Details)));
+        if (HistoryText.Length == 0) HistoryText = "История пока пуста.";
         try { await CheckScheduleAsync(); } catch (Exception ex) { if (!_disposed) ScheduleStatus = "Ошибка расписания: " + ex.Message; }
     }
     public void Dispose() { _disposed = true; Settings.PropertyChanged -= OnSettingsChanged; _lifetime.Cancel(); _scheduledCancellation?.Cancel(); _monitorCancellation?.Cancel(); _timer.Stop(); _timer.Tick -= OnTick; }

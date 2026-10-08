@@ -93,7 +93,7 @@
                                 <TextBlock Text="Game Updater" Foreground="#AFBED2" Margin="0,8,0,0"/>
                             </StackPanel>
                             <StackPanel Grid.Row="1"><TextBlock Text="РАБОЧАЯ ОБЛАСТЬ" FontSize="11" Foreground="#AFBED2" Margin="12,0,0,14"/><StackPanel IsItemsHost="True" KeyboardNavigation.TabNavigation="Once"/></StackPanel>
-                            <StackPanel Grid.Row="2"><Border Background="#233246" CornerRadius="6" Padding="10,6" HorizontalAlignment="Left"><TextBlock Text="v0.1.0 · Этап 1" FontSize="12"/></Border><TextBlock Text="Сервер компьютерного клуба" Foreground="#AFBED2" FontSize="12" Margin="0,14,0,0"/></StackPanel>
+                            <StackPanel Grid.Row="2"><Border Background="#233246" CornerRadius="6" Padding="10,6" HorizontalAlignment="Left"><TextBlock Text="Обслуживание клиентов" FontSize="12"/></Border><TextBlock Text="Сервер компьютерного клуба" Foreground="#AFBED2" FontSize="12" Margin="0,14,0,0"/></StackPanel>
                         </Grid>
                     </Border>
                     <ContentPresenter Grid.Column="1" Margin="32,30,32,24" ContentSource="SelectedContent"/>
