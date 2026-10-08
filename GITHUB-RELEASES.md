@@ -52,3 +52,6 @@ grace period; user activity, detected games and uncertain process readings
 prevent closure. Inactivity is a heuristic, not proof that a vendor download
 queue completed. No game or background service is forcibly terminated.
 See LAUNCHER-AUTO-CLOSE.md for settings, limitations and validation.
+
+Version 0.2.5 replaces outdated availability and roadmap cards in About with
+a versioned changelog for recent updates.

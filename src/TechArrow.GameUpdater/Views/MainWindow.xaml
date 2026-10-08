@@ -197,8 +197,15 @@
                     <ProgressBar Value="{Binding Progress, Mode=OneWay}" Maximum="100" Height="6" Margin="0,0,0,16"/>
                     <WrapPanel><Button Content="Проверить обновления" Command="{Binding CheckCommand}" Margin="0,0,12,8"/><Button Content="Установить и перезапустить" Command="{Binding InstallCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,0,8"/></WrapPanel>
                 </StackPanel></Border>
-                <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Что уже доступно" FontSize="21" FontWeight="SemiBold"/><TextBlock Text="Общее обслуживание клиентов, очередь Steam, история запусков, уведомления об ошибках и подключение к кабинету клубов." Margin="0,12,0,0" Style="{StaticResource Caption}"/></StackPanel></Border>
-                <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Следующие этапы" FontSize="21" FontWeight="SemiBold"/><TextBlock Margin="0,16,0,0" Text="05–06   Epic, Lesta, Battle.net, EA, Riot, VK Play и Wargaming&#10;&#10;07         История запусков и кабинет клубов&#10;&#10;09–10   Telegram и установщик"/></StackPanel></Border>
+                <Border Style="{StaticResource Card}"><StackPanel>
+                    <TextBlock Text="Что изменилось" FontSize="21" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding Updates.CurrentVersion, StringFormat=Версия {0}}" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,18,0,8"/>
+                    <TextBlock Text="• В разделе «О приложении» появился список изменений по версиям.&#10;• Убраны устаревшие блоки с этапами разработки." Style="{StaticResource Caption}"/>
+                    <TextBlock Text="Версия 0.2.4" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,22,0,8"/>
+                    <TextBlock Text="• Добавлен мониторинг Epic Games, Lesta, Battle.net, EA, Riot, VK Play и Wargaming.&#10;• Добавлено автозакрытие после устойчивого простоя при «Обновить всё» и обслуживании по расписанию.&#10;• В настройках можно отключить автозакрытие и изменить время ожидания.&#10;• Активность пользователя и обнаруженные игры откладывают закрытие. Простой не подтверждает завершение загрузок." Style="{StaticResource Caption}"/>
+                    <TextBlock Text="Версия 0.2.3" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,22,0,8"/>
+                    <TextBlock Text="• Добавлены история запусков и уведомления об ошибках.&#10;• Добавлено подключение компьютеров к кабинету клубов." Style="{StaticResource Caption}"/>
+                </StackPanel></Border>
                 <Border Style="{StaticResource Card}" Background="#1B3038" BorderBrush="#365762"><StackPanel><TextBlock Text="Безопасность аккаунтов" FontSize="19" FontWeight="SemiBold" Foreground="#ADFFED"/><TextBlock Text="Логины, пароли и коды двухфакторной авторизации не запрашиваются и не хранятся. Будущие модули будут использовать сохранённые сессии официальных клиентов." Style="{StaticResource Caption}" Margin="0,10,0,0"/></StackPanel></Border>
             </StackPanel></ScrollViewer>
         </TabItem>
