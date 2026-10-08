@@ -74,3 +74,6 @@ closure. Both configurable thresholds, CPU/cached-I/O guards, idle and grace are
 required. Steam additionally requires manifest-confirmed completion. The helper
 stops when the per-user pipe disconnects; no packet content or trace files are
 saved. Live localhost network and write-through disk checks passed on Windows.
+
+Version 0.2.9 finishes a manifest-confirmed Steam run while leaving the client
+open when the activity collector is unavailable. Includes all 0.2.8 measurements.
