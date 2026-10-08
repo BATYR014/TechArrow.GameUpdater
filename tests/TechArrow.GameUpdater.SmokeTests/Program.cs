@@ -174,6 +174,16 @@ try
     var installedUpdate = pendingUpdate with { Flags = 4, DownloadedBytes = 100, StagedBytes = 100 };
     SteamMonitorSample Sample(int seconds, string fingerprint, SteamUpdate update, bool reliable = true, bool? gameRunning = false)
         => new(now.AddSeconds(seconds), true, reliable, gameRunning, fingerprint, [update]);
+    var emptyQueuePolicy = new SteamCompletionPolicy(10, 5, 1, allowNoUpdates: true);
+    var idleInstall = installedUpdate with { TotalBytes = null, DownloadedBytes = null, StageBytes = null, StagedBytes = null };
+    Check(!emptyQueuePolicy.Evaluate(Sample(0, "idle", idleInstall)).ReadyToClose, "maintenance without updates still waits for idle");
+    Check(!emptyQueuePolicy.Evaluate(Sample(14, "idle", idleInstall)).ReadyToClose, "maintenance without updates waits for grace");
+    Check(emptyQueuePolicy.Evaluate(Sample(15, "idle", idleInstall)).ReadyToClose, "maintenance without updates can finish with installed manifests");
+    Check(!emptyQueuePolicy.Evaluate(Sample(16, "idle", idleInstall, gameRunning: true)).ReadyToClose, "game blocks no-update maintenance exit");
+    Check(!emptyQueuePolicy.Evaluate(Sample(17, "idle", idleInstall, reliable: false)).ReadyToClose, "unreliable data blocks no-update maintenance exit");
+    Check(!emptyQueuePolicy.Evaluate(new(now.AddSeconds(18), true, true, false, "idle", [])).ReadyToClose, "empty manifest inventory cannot prove no updates");
+    Check(!emptyQueuePolicy.Evaluate(Sample(19, "pending", pendingUpdate)).ReadyToClose, "new download blocks no-update maintenance exit");
+    Check(!emptyQueuePolicy.Evaluate(Sample(40, "idle", idleInstall)).ReadyToClose, "observed download still needs installation counters");
     var policy = new SteamCompletionPolicy(10, 5, 1);
     Check(!policy.Evaluate(Sample(0, "initial", installedUpdate)).ReadyToClose, "idle client cannot prove observed completion");
     Check(!policy.Evaluate(Sample(1, "download", pendingUpdate)).ReadyToClose, "active download blocks exit");

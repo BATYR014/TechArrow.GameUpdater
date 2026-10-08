@@ -376,7 +376,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             var activityPolicy = new LauncherIdlePolicy(DateTimeOffset.UtcNow, settings.IdleSeconds, settings.GraceSeconds,
                 settings.NetworkThresholdKb, settings.DiskThresholdMb, requireSeparateMeasurement: true);
             using var reader = new SteamMonitorReader(executable);
-            var policy = new SteamCompletionPolicy(settings.IdleSeconds, settings.GraceSeconds, settings.StuckTimeoutMinutes);
+            var policy = new SteamCompletionPolicy(settings.IdleSeconds, settings.GraceSeconds, settings.StuckTimeoutMinutes, allowNoUpdates: true);
             var logger = _logs.CreateLogger("SteamMonitor");
             logger.LogInformation("Мониторинг Steam запущен: простой {Idle} сек., пауза {Grace} сек.", settings.IdleSeconds, settings.GraceSeconds);
             string lastState = "";
@@ -413,7 +413,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 if (decision.ReadyToClose && AutoCloseSteam && !LauncherActivityCollector.Shared.IsEnabled)
                 {
                     MonitorStatus = "Steam оставлен открытым";
-                    MonitorDetail = "Обновления подтверждены манифестами, но измерения сети и диска недоступны. Автозакрытие заблокировано.";
+                    MonitorDetail = "Манифесты проверены, но измерения сети и диска недоступны. Автозакрытие заблокировано.";
+                    Launchers[0].Status = MonitorStatus; Launchers[0].Detail = MonitorDetail;
                     RecordDetail(MonitorDetail, true); break;
                 }
                 if (decision.ReadyToClose && AutoCloseSteam && activityDecision.ReadyToClose)
@@ -435,7 +436,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     logger.LogInformation("Отправка Steam штатной команды выхода.");
                     bool exited = await SteamMonitorReader.RequestExitAsync(executable, settings.GracefulExitTimeoutSeconds, cancellation.Token);
                     MonitorStatus = exited ? "Готово · Steam закрыт" : "Steam не завершился";
-                    MonitorDetail = exited ? "Наблюдавшиеся обновления завершены, клиент корректно закрыт." : "Время ожидания истекло. Клиент оставлен открытым; проверьте окно Steam.";
+                    MonitorDetail = exited ? "Обслуживание завершено, клиент корректно закрыт." : "Время ожидания истекло. Клиент оставлен открытым; проверьте окно Steam.";
+                    Launchers[0].Status = MonitorStatus; Launchers[0].Detail = MonitorDetail;
                     logger.LogInformation("Результат выхода Steam: {Exited}", exited);
                     RecordDetail(MonitorDetail, !exited);
                     if (!exited) logger.LogWarning("{Detail}", MonitorDetail);
@@ -561,7 +563,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         var collectorEnabled = LauncherActivityCollector.Shared.IsEnabled;
         if (_collectorWasEnabled != collectorEnabled) { _collectorWasEnabled = collectorEnabled; CollectorStatus = collectorEnabled ? "Измерения включены. Можно запустить обслуживание или дождаться расписания." : "Измерения выключены. Для расписания включите сборщик заранее."; }
-        if (_steamExecutable is not null && !_monitoring)
+        if (_steamExecutable is not null && !_monitoring && !Launchers[0].Status.Contains("закрыт", StringComparison.OrdinalIgnoreCase))
         {
             var processes = System.Diagnostics.Process.GetProcessesByName("steam");
             Launchers[0].Status = processes.Length > 0 ? "Запущен" : "Установлен";

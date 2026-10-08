@@ -23,8 +23,8 @@ public sealed record SteamMonitorSample(DateTimeOffset Timestamp, bool IsRunning
     bool? GameRunning, string Fingerprint, IReadOnlyList<SteamUpdate> Updates);
 public sealed record SteamMonitorDecision(string State, string Detail, bool ReadyToClose = false);
 
-// Only an update observed during this monitoring session can establish completion.
-public sealed class SteamCompletionPolicy(int idleSeconds, int graceSeconds, int stuckMinutes)
+// Observed updates require confirmed completion. Maintenance may also finish with no pending updates.
+public sealed class SteamCompletionPolicy(int idleSeconds, int graceSeconds, int stuckMinutes, bool allowNoUpdates = false)
 {
     private readonly HashSet<string> _observed = [];
     private DateTimeOffset? _quietSince, _lastChange;
@@ -39,14 +39,16 @@ public sealed class SteamCompletionPolicy(int idleSeconds, int graceSeconds, int
         foreach (var update in sample.Updates.Where(u => u.Pending)) _observed.Add(update.Id);
         if (sample.GameRunning != false)
         { _quietSince = null; return new("Ожидание", sample.GameRunning == true ? "Игра запущена. Steam останется открытым." : "Не удалось проверить запущенные игры. Автозакрытие заблокировано."); }
-        if (sample.Updates.Any(u => !u.Complete))
+        var noUpdates = allowNoUpdates && _observed.Count == 0 && sample.Updates.Count > 0 &&
+            sample.Updates.All(u => u.Flags == 4 && !u.Pending);
+        if (!noUpdates && sample.Updates.Any(u => !u.Complete))
         {
             _quietSince = null;
             var stalled = _lastChange is not null && sample.Timestamp - _lastChange >= TimeSpan.FromMinutes(stuckMinutes);
             return stalled ? new("Возможно, обновление зависло", "Данные давно не меняются. Проверьте очередь загрузок и подключение в Steam.") :
                 new("Обновление / ожидание", "Загрузка, установка, пауза или очередь ещё не завершены.");
         }
-        if (_observed.Count == 0)
+        if (_observed.Count == 0 && !noUpdates)
         { _quietSince = null; return new("Ожидание обновлений", "В этой сессии обновлений ещё не наблюдалось. Простой не означает завершение."); }
         if (_observed.Any(id => !sample.Updates.Any(u => u.Id == id && u.Complete)))
         { _quietSince = null; return new("Недостаточно данных", "Манифест обновлявшейся игры исчез. Автозакрытие заблокировано."); }
@@ -55,6 +57,7 @@ public sealed class SteamCompletionPolicy(int idleSeconds, int graceSeconds, int
         if (quiet < idleSeconds) return new("Проверка простоя", $"Без изменений: {quiet:F0} / {idleSeconds} сек.");
         if (quiet < (double)idleSeconds + graceSeconds)
             return new("Пауза перед закрытием", $"Осталось {Math.Ceiling(idleSeconds + graceSeconds - quiet)} сек. Новая активность отменит отсчёт.");
-        return new("Обновления завершены", "Наблюдавшиеся обновления завершены; файлы и журнал стабильны.", true);
+        return noUpdates ? new("Обновлений нет", "Очередь пуста по манифестам; файлы и журнал стабильны.", true) :
+            new("Обновления завершены", "Наблюдавшиеся обновления завершены; файлы и журнал стабильны.", true);
     }
 }
