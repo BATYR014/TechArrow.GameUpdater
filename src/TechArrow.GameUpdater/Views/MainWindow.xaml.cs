@@ -8,7 +8,21 @@ public partial class MainWindow : Window
 {
     private bool _selectingFile;
     public bool CanRestartForUpdate => !_selectingFile;
-    public MainWindow(MainViewModel viewModel, AppUpdatesViewModel updates, ClubViewModel club) { InitializeComponent(); viewModel.Updates = updates; viewModel.Club = club; DataContext = viewModel; Title = "TechArrow Game Updater — v" + updates.CurrentVersion; }
+    public MainWindow(MainViewModel viewModel, AppUpdatesViewModel updates, ClubViewModel club)
+    {
+        InitializeComponent();
+        viewModel.Updates = updates; viewModel.Club = club; DataContext = viewModel;
+        Title = "TechArrow Game Updater — v" + updates.CurrentVersion;
+        var workArea = SystemParameters.WorkArea;
+        MinWidth = Math.Min(640, workArea.Width);
+        MinHeight = Math.Min(420, workArea.Height);
+        Width = Math.Min(1180, workArea.Width * 0.94);
+        Height = Math.Min(820, workArea.Height * 0.94);
+        UpdateLayoutMode();
+    }
+    private void Window_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateLayoutMode();
+    private void UpdateLayoutMode() => Tag = (ActualWidth > 0 ? ActualWidth : Width) < 1000 ||
+        (ActualHeight > 0 ? ActualHeight : Height) < 620 ? "Compact" : "Desktop";
     private async void ConnectClub_Click(object sender, RoutedEventArgs e)
     {
         if (DataContext is not MainViewModel { Club: not null } model) return;

@@ -11,6 +11,17 @@
         <Setter Property="FontSize" Value="15"/>
         <Setter Property="UseLayoutRounding" Value="True"/>
     </Style>
+    <Style TargetType="ScrollViewer"><Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/><Setter Property="PanningMode" Value="VerticalOnly"/></Style>
+    <Style TargetType="ScrollBar">
+        <Setter Property="Width" Value="12"/><Setter Property="Background" Value="#101722"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar">
+            <Grid Background="{TemplateBinding Background}"><Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="True">
+                <Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Focusable="False"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.DecreaseRepeatButton>
+                <Track.Thumb><Thumb MinHeight="24"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border x:Name="Grip" Background="#40516A" CornerRadius="4" Margin="3,2"/><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Grip" Property="Background" Value="#7BE3CF"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Thumb.Template></Thumb></Track.Thumb>
+                <Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Focusable="False"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.IncreaseRepeatButton>
+            </Track></Grid>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
     <Style TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
@@ -21,6 +32,7 @@
         <Setter Property="FontSize" Value="30"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Margin" Value="0,0,0,8"/>
+        <Style.Triggers><DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=Window}}" Value="Compact"><Setter Property="FontSize" Value="26"/></DataTrigger></Style.Triggers>
     </Style>
     <Style x:Key="Caption" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
@@ -33,8 +45,10 @@
         <Setter Property="CornerRadius" Value="12"/>
         <Setter Property="Padding" Value="24"/>
         <Setter Property="Margin" Value="0,0,0,16"/>
+        <Style.Triggers><DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=Window}}" Value="Compact"><Setter Property="Padding" Value="16"/></DataTrigger></Style.Triggers>
     </Style>
     <Style TargetType="Button">
+        <Setter Property="ContentTemplate"><Setter.Value><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/></DataTemplate></Setter.Value></Setter>
         <Setter Property="Background" Value="#7BE3CF"/>
         <Setter Property="Foreground" Value="#102621"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
@@ -54,6 +68,10 @@
                 </ControlTemplate.Triggers>
             </ControlTemplate>
         </Setter.Value></Setter>
+    </Style>
+    <Style TargetType="CheckBox">
+        <Setter Property="VerticalContentAlignment" Value="Top"/>
+        <Setter Property="ContentTemplate"><Setter.Value><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap"/></DataTemplate></Setter.Value></Setter>
     </Style>
     <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="Background" Value="#2A394F"/><Setter Property="Foreground" Value="#F1F5FC"/>
@@ -85,37 +103,57 @@
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         <Setter Property="Template"><Setter.Value>
             <ControlTemplate TargetType="TabControl">
-                <Grid Background="{TemplateBinding Background}"><Grid.ColumnDefinitions><ColumnDefinition Width="220"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Border Background="#121A26" BorderBrush="#293649" BorderThickness="0,0,1,0">
-                        <Grid Margin="20,30,20,22"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                            <StackPanel Margin="8,0,0,36">
+                <Grid Background="{TemplateBinding Background}"><Grid.ColumnDefinitions><ColumnDefinition x:Name="SidebarColumn" Width="220"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <Border x:Name="Navigation" Grid.RowSpan="2" Background="#121A26" BorderBrush="#293649" BorderThickness="0,0,1,0">
+                        <Grid x:Name="NavigationLayout" Margin="20,30,20,22"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <StackPanel x:Name="Brand" Margin="8,0,0,36">
                                 <TextBlock Text="↗  TECHARROW" Foreground="#7BE3CF" FontWeight="Bold" FontSize="19"/>
                                 <TextBlock Text="Game Updater" Foreground="#AFBED2" Margin="0,8,0,0"/>
                             </StackPanel>
-                            <StackPanel Grid.Row="1"><TextBlock Text="РАБОЧАЯ ОБЛАСТЬ" FontSize="11" Foreground="#AFBED2" Margin="12,0,0,14"/><StackPanel IsItemsHost="True" KeyboardNavigation.TabNavigation="Once"/></StackPanel>
-                            <StackPanel Grid.Row="2"><Border Background="#233246" CornerRadius="6" Padding="10,6" HorizontalAlignment="Left"><TextBlock Text="Обслуживание клиентов" FontSize="12"/></Border><TextBlock Text="Сервер компьютерного клуба" Foreground="#AFBED2" FontSize="12" Margin="0,14,0,0"/></StackPanel>
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel><TextBlock x:Name="NavigationHeading" Text="РАБОЧАЯ ОБЛАСТЬ" FontSize="11" Foreground="#AFBED2" Margin="12,0,0,14"/><WrapPanel IsItemsHost="True" KeyboardNavigation.TabNavigation="Once"/></StackPanel></ScrollViewer>
+                            <StackPanel x:Name="NavigationFooter" Grid.Row="2"><Border Background="#233246" CornerRadius="6" Padding="10,6" HorizontalAlignment="Left"><TextBlock Text="Обслуживание клиентов" FontSize="12"/></Border><TextBlock Text="Сервер компьютерного клуба" Foreground="#AFBED2" FontSize="12" Margin="0,14,0,0"/></StackPanel>
                         </Grid>
                     </Border>
-                    <ContentPresenter Grid.Column="1" Margin="32,30,32,24" ContentSource="SelectedContent"/>
+                    <ContentPresenter x:Name="PageContent" Grid.Column="1" Grid.RowSpan="2" Margin="28,24,24,20" ContentSource="SelectedContent"/>
                 </Grid>
+                <ControlTemplate.Triggers>
+                    <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=Window}}" Value="Compact">
+                        <Setter TargetName="SidebarColumn" Property="Width" Value="0"/>
+                        <Setter TargetName="Navigation" Property="Grid.ColumnSpan" Value="2"/>
+                        <Setter TargetName="Navigation" Property="Grid.RowSpan" Value="1"/>
+                        <Setter TargetName="Navigation" Property="BorderThickness" Value="0,0,0,1"/>
+                        <Setter TargetName="NavigationLayout" Property="Margin" Value="12,8,12,0"/>
+                        <Setter TargetName="Brand" Property="Visibility" Value="Collapsed"/>
+                        <Setter TargetName="NavigationHeading" Property="Visibility" Value="Collapsed"/>
+                        <Setter TargetName="NavigationFooter" Property="Visibility" Value="Collapsed"/>
+                        <Setter TargetName="PageContent" Property="Grid.Column" Value="0"/>
+                        <Setter TargetName="PageContent" Property="Grid.ColumnSpan" Value="2"/>
+                        <Setter TargetName="PageContent" Property="Grid.Row" Value="1"/>
+                        <Setter TargetName="PageContent" Property="Grid.RowSpan" Value="1"/>
+                        <Setter TargetName="PageContent" Property="Margin" Value="16,16,12,12"/>
+                    </DataTrigger>
+                </ControlTemplate.Triggers>
             </ControlTemplate>
         </Setter.Value></Setter>
     </Style>
     <Style TargetType="TabItem">
+        <Setter Property="Width" Value="180"/>
         <Setter Property="Foreground" Value="#AFBED2"/>
         <Setter Property="FontSize" Value="15"/>
         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         <Setter Property="Template"><Setter.Value>
             <ControlTemplate TargetType="TabItem">
                 <Border x:Name="Tab" Background="Transparent" CornerRadius="8" Margin="0,0,0,8" BorderThickness="1" BorderBrush="Transparent">
-                    <Grid><Border x:Name="Marker" Background="Transparent" Width="3" HorizontalAlignment="Left" CornerRadius="2" Margin="0,12"/><ContentPresenter ContentSource="Header" Margin="16,13" RecognizesAccessKey="True"/></Grid>
+                    <Grid><Border x:Name="Marker" Background="Transparent" Width="3" HorizontalAlignment="Left" CornerRadius="2" Margin="0,12"/><ContentPresenter x:Name="TabHeader" ContentSource="Header" Margin="16,13" RecognizesAccessKey="True"/></Grid>
                 </Border>
                 <ControlTemplate.Triggers>
+                    <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=Window}}" Value="Compact"><Setter TargetName="TabHeader" Property="Margin" Value="12,8"/><Setter TargetName="Tab" Property="Margin" Value="0,0,4,6"/></DataTrigger>
                     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Tab" Property="Background" Value="#202D40"/></Trigger>
                     <Trigger Property="IsSelected" Value="True"><Setter TargetName="Tab" Property="Background" Value="#233C40"/><Setter TargetName="Marker" Property="Background" Value="#7BE3CF"/><Setter Property="Foreground" Value="#ADFFED"/><Setter Property="FontWeight" Value="SemiBold"/></Trigger>
                     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Tab" Property="BorderBrush" Value="#7BE3CF"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate>
         </Setter.Value></Setter>
+        <Style.Triggers><DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=Window}}" Value="Compact"><Setter Property="Width" Value="Auto"/><Setter Property="FontSize" Value="13"/></DataTrigger></Style.Triggers>
     </Style>
 </ResourceDictionary>

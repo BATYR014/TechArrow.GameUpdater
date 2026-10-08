@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}"
         Title="TechArrow Game Updater — v0.1.0" Width="1180" Height="820"
-        MinWidth="920" MinHeight="640" WindowStartupLocation="CenterScreen">
+        MinWidth="640" MinHeight="420" WindowStartupLocation="CenterScreen" SizeChanged="Window_SizeChanged">
     <TabControl>
         <TabItem Header="Обзор">
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -40,10 +40,10 @@
                         <ItemsControl.ItemTemplate><DataTemplate>
                             <Border Style="{StaticResource Card}" Padding="22,20">
                                 <StackPanel>
-                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                         <Border Width="42" Height="42" Background="#2A3D56" CornerRadius="10" VerticalAlignment="Top"><TextBlock Text="↗" FontSize="26" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#AFCDF7"/></Border>
                                         <StackPanel Grid.Column="1"><TextBlock Text="{Binding Name}" FontSize="21" FontWeight="SemiBold"/><TextBlock Text="{Binding Authorization}" Style="{StaticResource Caption}" FontSize="13" Margin="0,5,8,0"/></StackPanel>
-                                        <Border Grid.Column="2" Background="#383124" CornerRadius="6" Padding="10,5" VerticalAlignment="Top"><TextBlock Text="{Binding Status}" Foreground="#F4D396" FontSize="12"/></Border>
+                                        <Border Grid.Column="1" Grid.Row="1" Background="#383124" CornerRadius="6" Padding="10,5" Margin="0,10,0,0" HorizontalAlignment="Left"><TextBlock Text="{Binding Status}" Foreground="#F4D396" FontSize="12"/></Border>
                                     </Grid>
                                     <Border Height="1" Background="#2B3749" Margin="0,18,0,14"/>
                                     <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" FontSize="14"/>
@@ -143,7 +143,7 @@
                     <Border Style="{StaticResource Card}"><StackPanel>
                         <TextBlock Text="Мониторинг активности" FontSize="21" FontWeight="SemiBold"/>
                         <TextBlock Text="Время простоя и пауза фиксируются при запуске мониторинга. Изменения применяются к следующей сессии." Style="{StaticResource Caption}" Margin="0,8,0,22"/>
-                        <UniformGrid Columns="2">
+                        <UniformGrid><UniformGrid.Style><Style TargetType="UniformGrid"><Setter Property="Columns" Value="2"/><Style.Triggers><DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=Window}}" Value="Compact"><Setter Property="Columns" Value="1"/></DataTrigger></Style.Triggers></Style></UniformGrid.Style>
                             <StackPanel Margin="0,0,20,0"><TextBlock Text="Порог сети · КБ/с (резерв)"/><TextBox Text="{Binding Network, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Порог сети в КБ/с"/></StackPanel>
                             <StackPanel><TextBlock Text="Порог записи · МБ/с (резерв)"/><TextBox Text="{Binding Disk, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Порог записи на диск в МБ/с"/></StackPanel>
                             <StackPanel Margin="0,0,20,0"><TextBlock Text="Время простоя · секунды"/><TextBox Text="{Binding Idle, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Время простоя в секундах"/></StackPanel>
@@ -200,7 +200,9 @@
                 <Border Style="{StaticResource Card}"><StackPanel>
                     <TextBlock Text="Что изменилось" FontSize="21" FontWeight="SemiBold"/>
                     <TextBlock Text="{Binding Updates.CurrentVersion, StringFormat=Версия {0}}" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,18,0,8"/>
-                    <TextBlock Text="• В разделе «О приложении» появился список изменений по версиям.&#10;• Убраны устаревшие блоки с этапами разработки." Style="{StaticResource Caption}"/>
+                    <TextBlock Text="• Интерфейс адаптируется к размеру окна и масштабу Windows.&#10;• На небольшом экране меню переносится вверх, а параметры — в одну колонку.&#10;• Исправлены перенос текста, статусы клиентов и оформление прокрутки." Style="{StaticResource Caption}"/>
+                    <TextBlock Text="Версия 0.2.5" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,22,0,8"/>
+                    <TextBlock Text="• Добавлен список изменений по версиям вместо устаревших этапов разработки." Style="{StaticResource Caption}"/>
                     <TextBlock Text="Версия 0.2.4" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,22,0,8"/>
                     <TextBlock Text="• Добавлен мониторинг Epic Games, Lesta, Battle.net, EA, Riot, VK Play и Wargaming.&#10;• Добавлено автозакрытие после устойчивого простоя при «Обновить всё» и обслуживании по расписанию.&#10;• В настройках можно отключить автозакрытие и изменить время ожидания.&#10;• Активность пользователя и обнаруженные игры откладывают закрытие. Простой не подтверждает завершение загрузок." Style="{StaticResource Caption}"/>
                     <TextBlock Text="Версия 0.2.3" FontSize="17" FontWeight="SemiBold" Foreground="#ADFFED" Margin="0,22,0,8"/>

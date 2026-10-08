@@ -55,3 +55,8 @@ See LAUNCHER-AUTO-CLOSE.md for settings, limitations and validation.
 
 Version 0.2.5 replaces outdated availability and roadmap cards in About with
 a versioned changelog for recent updates.
+
+Version 0.2.6 adds responsive navigation and content layout. Compact windows use
+top navigation and a single column for monitoring settings. Initial window size
+respects the Windows work area; text, client badges and dark scrollbars remain
+readable at smaller sizes. Layout renders checked at 680x500, 960x600 and 1440x900.
